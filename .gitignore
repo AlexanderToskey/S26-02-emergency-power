@@ -1,0 +1,17 @@
+# Ignore virtual environments
+venv/
+.env/
+
+# Ignore large datasets
+data/*.csv
+data/*.json
+!data/sample.csv  # (optional: keep a tiny sample file)
+
+# Ignore model weights/checkpoints
+*.pth
+*.pkl
+*.h5
+checkpoints/
+
+# Ignore Jupyter metadata
+.ipynb_checkpoints
