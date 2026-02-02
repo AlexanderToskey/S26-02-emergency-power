@@ -1,0 +1,1 @@
+﻿# Outage Scope AI Model
