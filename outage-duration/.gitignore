@@ -1,0 +1,38 @@
+# Data files (downloaded via scripts, too large for git)
+data/*.csv
+data/*.gz
+!data/.gitkeep
+
+# Cached mapping file
+data/nws_zone_county_va.csv
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model artifacts
+*.joblib
+*.pkl
