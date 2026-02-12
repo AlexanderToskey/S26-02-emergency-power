@@ -64,39 +64,14 @@ def extract_temporal_features(
 
 def calculate_duration(
     df: pd.DataFrame,
-    fips_col: str = 'fips_code',
-    time_col: str = 'run_start_time',
-    affected_col: str = 'customers_affected',
+    fips_col: str = "fips_code",
+    time_col: str = "run_start_time",
+    affected_col: str = "customers_affected",
+    snapshot_minutes: int = 15,
+    gap_multiplier: int = 2,   # break outage if gap > 2 * snapshot interval
 ) -> pd.DataFrame:
-    """Calculate outage duration in minutes from EAGLE-I snapshots.
+    """Convert EAGLE-I snapshots -> outage events + early-outage features (no leakage)."""
 
-    EAGLE-I data consists of periodic snapshots (rows) showing how many
-    customers are affected at each timestamp per county. An outage is a
-    contiguous stretch of snapshots where customers_affected > 0.
-    Duration is computed as (last_snapshot_time - first_snapshot_time)
-    for each contiguous outage event.
-
-    Each row in the output represents one outage event (not a snapshot).
-
-    Args:
-        df: EAGLE-I DataFrame with snapshot data. Must have fips_code,
-            run_start_time, and customers_affected columns.
-        fips_col: Column identifying the county. Defaults to 'fips_code'.
-        time_col: Timestamp column. Defaults to 'run_start_time'.
-        affected_col: Column with customer count. Defaults to 'customers_affected'.
-
-    Returns:
-        DataFrame of outage events with columns: fips_code, county, state,
-        start_time, end_time, duration_minutes, peak_customers_affected,
-        plus any weather columns if present.
-
-    Raises:
-        ValueError: If required columns are missing.
-
-    Examples:
-        >>> events = calculate_duration(eagle_df)
-        >>> events[['fips_code', 'duration_minutes']].head()
-    """
     for col in [fips_col, time_col, affected_col]:
         if col not in df.columns:
             raise ValueError(f"Missing required column: '{col}'")
@@ -104,71 +79,147 @@ def calculate_duration(
     print("[preprocessor] Calculating outage durations from snapshots ...")
 
     df = df.copy()
+    df[time_col] = pd.to_datetime(df[time_col], errors="coerce")
+    df = df.dropna(subset=[time_col])
+
     df = df.sort_values([fips_col, time_col]).reset_index(drop=True)
 
-    # Flag rows where an outage is happening (customers > 0)
-    df['is_outage'] = df[affected_col] > 0
+    # outage flag
+    df["is_outage"] = df[affected_col] > 0
 
-    # Detect contiguous outage blocks per county
-    # A new block starts when is_outage changes or fips_code changes
-    df['block'] = (
-        (df['is_outage'] != df['is_outage'].shift(1)) |
-        (df[fips_col] != df[fips_col].shift(1))
-    ).cumsum()
+    # NEW: break blocks on large time gaps (prevents merging separate outages)
+    df["time_diff_min"] = (
+        df.groupby(fips_col)[time_col]
+        .diff()
+        .dt.total_seconds()
+        .div(60)
+    )
+    df["gap_break"] = df["time_diff_min"] > (gap_multiplier * snapshot_minutes)
 
-    # Keep only outage rows
-    outage_rows = df[df['is_outage']].copy()
+    # contiguous blocks per county, with gap break
+    df["block_start"] = (
+        (df["is_outage"] != df["is_outage"].shift(1))
+        | (df[fips_col] != df[fips_col].shift(1))
+        | (df["gap_break"].fillna(False))
+    )
+    df["block"] = df["block_start"].cumsum()
 
+    outage_rows = df[df["is_outage"]].copy()
     if len(outage_rows) == 0:
         print("[preprocessor] WARNING: No outage periods found (all customers_affected == 0)")
         return pd.DataFrame()
 
-    # Aggregate each contiguous outage block
+    outage_rows = outage_rows.sort_values([fips_col, time_col])
+
+    # ---- EARLY OUTAGE FEATURES (no leakage) ----
+    first_rows = (
+        outage_rows.groupby("block", as_index=False)
+        .first()
+        .rename(columns={time_col: "start_time", affected_col: "initial_customers_affected"})
+    )
+
+    second_rows = (
+        outage_rows.groupby("block")
+        .nth(1)
+        .reset_index()
+        .rename(columns={time_col: "second_time", affected_col: "second_customers_affected"})
+    )
+
+    early = first_rows.merge(
+        second_rows[["block", "second_customers_affected"]],
+        on="block",
+        how="left",
+    )
+
+    early["second_customers_affected"] = early["second_customers_affected"].fillna(
+        early["initial_customers_affected"]
+    )
+    early["delta_customers_affected_15m"] = (
+        early["second_customers_affected"] - early["initial_customers_affected"]
+    )
+    denom = early["initial_customers_affected"].clip(lower=1)
+    early["pct_growth_15m"] = (early["delta_customers_affected_15m"] / denom).astype(float)
+
+    # ---- EVENT-LEVEL AGGREGATION ----
     agg_dict = {
-        time_col: ['first', 'last'],
-        affected_col: 'max',
-        'county': 'first',
-        'state': 'first',
-        fips_col: 'first',
+        time_col: ["last"],
+        affected_col: "max",
+        "county": "first" if "county" in outage_rows.columns else "first",
+        "state": "first" if "state" in outage_rows.columns else "first",
+        fips_col: "first",
     }
+    if "event_type" in outage_rows.columns:
+        agg_dict["event_type"] = "first"
+    if "magnitude" in outage_rows.columns:
+        agg_dict["magnitude"] = "max"
 
-    # Include event_type if present (from weather merge)
-    if 'event_type' in outage_rows.columns:
-        agg_dict['event_type'] = 'first'
+    events = outage_rows.groupby("block").agg(agg_dict)
+    events.columns = [f"{c[0]}_{c[1]}" if c[1] else c[0] for c in events.columns]
+    events = events.reset_index()
 
-    events = outage_rows.groupby('block').agg(agg_dict)
-
-    # Flatten multi-level columns
-    events.columns = [
-        f"{col[0]}_{col[1]}" if col[1] else col[0]
-        for col in events.columns
-    ]
-
-    # Rename to clean names
     rename_map = {
-        f'{time_col}_first': 'start_time',
-        f'{time_col}_last': 'end_time',
-        f'{affected_col}_max': 'peak_customers_affected',
-        'county_first': 'county',
-        'state_first': 'state',
-        f'{fips_col}_first': 'fips_code',
+        f"{time_col}_last": "end_time",
+        f"{affected_col}_max": "peak_customers_affected",
+        f"{fips_col}_first": "fips_code",
     }
-    if 'event_type_first' in events.columns:
-        rename_map['event_type_first'] = 'event_type'
+    if "county_first" in events.columns:
+        rename_map["county_first"] = "county"
+    if "state_first" in events.columns:
+        rename_map["state_first"] = "state"
+    if "event_type_first" in events.columns:
+        rename_map["event_type_first"] = "event_type"
+    if "magnitude_max" in events.columns:
+        rename_map["magnitude_max"] = "max_magnitude"
 
     events = events.rename(columns=rename_map)
 
-    # Calculate duration
-    events['duration_minutes'] = (
-        (events['end_time'] - events['start_time']).dt.total_seconds() / 60
+    # add early features (start_time + early growth)
+    events = events.merge(
+        early[
+            [
+                "block",
+                "start_time",
+                "initial_customers_affected",
+                "delta_customers_affected_15m",
+                "pct_growth_15m",
+            ]
+        ],
+        on="block",
+        how="left",
     )
 
-    events = events.reset_index(drop=True)
+    # duration
+    events["start_time"] = pd.to_datetime(events["start_time"], errors="coerce")
+    events["end_time"] = pd.to_datetime(events["end_time"], errors="coerce")
+    events["duration_minutes"] = (
+        (events["end_time"] - events["start_time"]).dt.total_seconds() / 60
+    ) + snapshot_minutes
 
-    print(f"[preprocessor] Found {len(events):,} outage events "
-          f"(median duration: {events['duration_minutes'].median():.0f} min)")
+    # weather summary across outage snapshots
+    if "event_type" in outage_rows.columns:
+        weather_counts = (
+            outage_rows.groupby("block")["event_type"]
+            .apply(lambda s: int(s.notna().sum()))
+            .reset_index(name="weather_event_count")
+        )
+        events = events.merge(weather_counts, on="block", how="left")
+        events["weather_event_count"] = events["weather_event_count"].fillna(0).astype(int)
+        events["has_weather_event"] = (events["weather_event_count"] > 0).astype(int)
 
+    if "max_magnitude" in events.columns:
+        events["max_magnitude"] = pd.to_numeric(events["max_magnitude"], errors="coerce")
+        events["magnitude_missing"] = events["max_magnitude"].isna().astype(int)
+        events["max_magnitude"] = events["max_magnitude"].fillna(0.0)
+
+    events = events.drop(columns=["block"])
+
+    print(
+        f"[preprocessor] Found {len(events):,} outage events "
+        f"(median duration: {events['duration_minutes'].median():.0f} min)"
+    )
     return events
+
+
 
 
 def filter_valid_durations(
@@ -267,81 +318,114 @@ def create_duration_category(
 def prepare_features(
     df: pd.DataFrame,
     feature_cols: Optional[List[str]] = None,
-    target_col: str = 'duration_minutes',
+    target_col: str = "duration_minutes",
 ) -> Tuple[pd.DataFrame, pd.Series]:
-    """Prepare feature matrix X and target vector y for modeling.
-
-    Selects the specified feature columns and target, drops rows with
-    any NaN in the selected columns, and returns clean arrays.
-
-    Args:
-        df: Preprocessed DataFrame with features and target.
-        feature_cols: List of column names to use as features. Defaults to
-            ['fips_code', 'year', 'month', 'day', 'hour', 'dayofweek'].
-            Additional columns like 'event_type' are included if present.
-        target_col: Name of the target column. Defaults to 'duration_minutes'.
-
-    Returns:
-        Tuple of (X, y) where X is a DataFrame of features and y is a
-        Series of target values, both with matching indices.
-
-    Raises:
-        ValueError: If target column is missing.
-
-    Examples:
-        >>> X, y = prepare_features(processed_df)
-        >>> X.shape
-        (10000, 7)
-        >>> y.name
-        'duration_minutes'
     """
+    Prepare X (features) and y (target) for outage duration modeling.
+
+    This version:
+      - uses only high-signal features (location, early outage dynamics, weather severity, timing)
+      - one-hot encodes event_type (and does NOT drop most rows)
+      - returns numeric-only X for XGBoost
+    """
+
     if target_col not in df.columns:
         raise ValueError(f"Target column '{target_col}' not found in DataFrame")
 
-    if feature_cols is None:
-        feature_cols = [
-            'fips_code', 'year', 'month', 'day', 'hour', 'dayofweek',
-        ]
-
-    # Add optional columns if they exist in the data
-    optional_cols = ['event_type', 'peak_customers_affected']
-    for col in optional_cols:
-        if col in df.columns and col not in feature_cols:
-            feature_cols.append(col)
-
-    # Filter to columns that actually exist
-    available = [c for c in feature_cols if c in df.columns]
-    missing = [c for c in feature_cols if c not in df.columns]
-    if missing:
-        print(f"[preprocessor] WARNING: Missing feature columns: {missing}")
-
-    print(f"[preprocessor] Preparing features: {available}")
-
     df = df.copy()
 
-    # Encode fips_code as integer for the model
-    if 'fips_code' in available:
-        df['fips_code'] = pd.to_numeric(df['fips_code'], errors='coerce')
+    # ----------------------------
+    # 1) Choose "important" base features
+    # ----------------------------
+    if feature_cols is None:
+        feature_cols = [
+            # location
+            "fips_code",
+            # operational timing
+            "hour",
+            "dayofweek",
+            # early outage dynamics
+            "initial_customers_affected",
+            "delta_customers_affected_15m",
+            "pct_growth_15m",
+            # weather severity
+            "weather_event_count",
+            "max_magnitude",
+            "magnitude_missing",
+        ]
 
-    # Encode event_type as categorical integer
-    if 'event_type' in available:
-        df['event_type'] = df['event_type'].fillna('None')
-        df['event_type'] = df['event_type'].astype('category').cat.codes
+    # Keep only columns that actually exist (avoid crashing if a feature wasn't created)
+    base_available = [c for c in feature_cols if c in df.columns]
+    missing = [c for c in feature_cols if c not in df.columns]
+    if missing:
+        print(f"[preprocessor] WARNING: Missing engineered features (skipping): {missing}")
 
-    # Drop rows with NaN in features or target
-    subset = available + [target_col]
+    # ----------------------------
+    # 2) Handle event_type -> one-hot
+    # ----------------------------
+    # If your merge produced event_type, create event_* columns here.
+    if "event_type" in df.columns:
+        # Fill NaN as "None" so unmatched weather doesn't get dropped
+        df["event_type"] = df["event_type"].fillna("None").astype(str)
+
+        # One-hot encode, keep all categories
+        dummies = pd.get_dummies(df["event_type"], prefix="event")
+
+        # Attach to df
+        df = pd.concat([df, dummies], axis=1)
+
+    # If event_* columns already exist (from earlier steps), we still include them.
+    event_cols = [c for c in df.columns if c.startswith("event_")]
+
+    # ----------------------------
+    # 3) Build final feature list
+    # ----------------------------
+    final_features = base_available + event_cols
+
+    # De-duplicate while preserving order
+    seen = set()
+    final_features = [c for c in final_features if not (c in seen or seen.add(c))]
+
+    print(f"[preprocessor] Preparing features ({len(final_features)}): {final_features}")
+
+    # ----------------------------
+    # 4) Coerce types to numeric
+    # ----------------------------
+    if "fips_code" in final_features:
+        df["fips_code"] = pd.to_numeric(df["fips_code"], errors="coerce")
+
+    # Make sure boolean dummy cols become 0/1 ints (sometimes pandas keeps True/False)
+    for c in event_cols:
+        df[c] = df[c].astype(int)
+
+    # Coerce any remaining columns to numeric where reasonable
+    for c in final_features:
+        if c not in df.columns:
+            continue
+        if df[c].dtype == "object":
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    # ----------------------------
+    # 5) Drop rows with NaN ONLY in base features + target
+    # ----------------------------
+    # Important: do NOT include event_type itself (we encoded it).
+    subset = base_available + [target_col]
     before = len(df)
     df = df.dropna(subset=subset)
-    if len(df) < before:
-        print(f"[preprocessor] Dropped {before - len(df):,} rows with NaN values")
+    dropped = before - len(df)
+    if dropped > 0:
+        print(f"[preprocessor] Dropped {dropped:,} rows with NaN in {subset}")
 
-    X = df[available].copy()
+    X = df[final_features].copy()
     y = df[target_col].copy()
 
-    print(f"[preprocessor] Final dataset: {X.shape[0]:,} samples, "
-          f"{X.shape[1]} features")
+    # Final sanity: ensure numeric
+    X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
+
+    print(f"[preprocessor] Final dataset: {len(X):,} samples, {X.shape[1]} features")
 
     return X, y
+
 
 
 def run_full_pipeline(
@@ -383,6 +467,11 @@ def run_full_pipeline(
 
     if len(df) == 0:
         raise ValueError("No outage events found after duration calculation")
+    
+    # One-hot encode event_type into event_* columns (keep NaNs as "None")
+    if "event_type" in df.columns:
+        df["event_type"] = df["event_type"].fillna("None")
+        df = pd.get_dummies(df, columns=["event_type"], prefix="event")
 
     # Step 3: Filter invalid durations
     df = filter_valid_durations(df)

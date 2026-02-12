@@ -42,61 +42,86 @@ class OutageDurationModel:
         self.model = xgb.XGBRegressor(**self.params)
         self.isTrained = False
 
-    def train(self, X: pd.DataFrame, y: pd.Series,
-              validationSplit: float = 0.2) -> Dict[str, Any]:
+    def train(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        validationSplit: float = 0.2,
+        longThresholdMin: float = 240.0,
+        longWeight: float = 1.0,
+    ) -> Dict[str, Any]:
         """
-        trains the model on the provided data
+        Train the model.
 
-        Args:
-            X: feature dataframe
-            y: target series (duration in minutes)
-            validationSplit: fraction of data to hold out for validation
-
-        Returns:
-            dict with training info (val scores, feature importances, etc)
+        IMPORTANT CONTRACT:
+        - y must be RAW outage duration in minutes (not log).
+        - We compute weights using raw minutes.
+        - We train XGBoost on log1p(minutes).
+        - predict() returns minutes.
         """
-        # split for validation
         xTrain, xVal, yTrain, yVal = train_test_split(
             X, y, test_size=validationSplit, random_state=42
         )
 
-        # fit with early stopping
+        # Ensure raw minutes (no log!)
+        yTrainMin = pd.to_numeric(yTrain, errors="coerce").astype(float).values
+        yValMin = pd.to_numeric(yVal, errors="coerce").astype(float).values
+
+        # Drop any invalid rows (just in case)
+        train_ok = np.isfinite(yTrainMin) & (yTrainMin >= 0)
+        val_ok = np.isfinite(yValMin) & (yValMin >= 0)
+
+        xTrain = xTrain.loc[xTrain.index[train_ok]]
+        yTrainMin = yTrainMin[train_ok]
+
+        xVal = xVal.loc[xVal.index[val_ok]]
+        yValMin = yValMin[val_ok]
+
+        # Sample weights based on RAW minutes
+        long_mask_train = (yTrainMin >= longThresholdMin)
+        long_mask_val = (yValMin >= longThresholdMin)
+
+        wTrain = np.where(long_mask_train, float(longWeight), 1.0).astype(float)
+        wVal = np.where(long_mask_val, float(longWeight), 1.0).astype(float)
+
+        print(f"[model] USING WEIGHTED TRAIN: longWeight={longWeight}, longThresholdMin={longThresholdMin}")
+        print(f"[model] wTrain unique={np.unique(wTrain)}  long_frac={long_mask_train.mean():.3f}")
+
+        # Train on log1p(minutes)
+        yTrainLog = np.log1p(yTrainMin)
+        yValLog = np.log1p(yValMin)
+
         self.model.fit(
-            xTrain, yTrain,
-            eval_set=[(xVal, yVal)],
-            verbose=False
+            xTrain,
+            yTrainLog,
+            sample_weight=wTrain,
+            eval_set=[(xVal, yValLog)],
+            sample_weight_eval_set=[wVal],
+            verbose=False,
         )
 
         self.isTrained = True
         self.featureNames = list(X.columns)
 
-        # get validation predictions for reporting
-        valPreds = self.model.predict(xVal)
-
-        trainInfo = {
-            'train_samples': len(xTrain),
-            'val_samples': len(xVal),
-            'feature_names': self.featureNames,
-            'feature_importances': dict(zip(self.featureNames,
-                                           self.model.feature_importances_))
+        return {
+            "train_samples": len(xTrain),
+            "val_samples": len(xVal),
+            "feature_names": self.featureNames,
+            "feature_importances": dict(zip(self.featureNames, self.model.feature_importances_)),
         }
 
-        return trainInfo
+
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
-        """
-        makes predictions on new data
-
-        Args:
-            X: feature dataframe (same format as training data)
-
-        Returns:
-            array of predicted durations in minutes
-        """
         if not self.isTrained:
             raise ValueError("model hasnt been trained yet, call train() first")
 
-        return self.model.predict(X)
+        predLog = self.model.predict(X)
+
+        # Safety clip: prevents exp overflow if model outputs something insane
+        predLog = np.clip(predLog, -20, 20)
+
+        return np.expm1(predLog)
 
     def save(self, path: str):
         """
