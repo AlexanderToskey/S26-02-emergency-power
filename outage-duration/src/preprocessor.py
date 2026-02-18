@@ -153,6 +153,17 @@ def calculate_duration(
     if "magnitude" in outage_rows.columns:
         agg_dict["magnitude"] = "max"
 
+    # Pass GHCN-Daily daily weather columns through to the event level.
+    # Use "first" since GHCN data is daily -- all snapshots on the same day
+    # have the same value, and we want the weather at outage START.
+    _ghcnd_cols = [
+        "prcp_mm", "snow_mm", "snwd_mm", "tmax_c", "tmin_c", "awnd_ms",
+        "wt_fog", "wt_thunder", "wt_ice", "wt_blowing_snow", "wt_freezing_rain", "wt_snow",
+    ]
+    for col in _ghcnd_cols:
+        if col in outage_rows.columns:
+            agg_dict[col] = "first"
+
     events = outage_rows.groupby("block").agg(agg_dict)
     events.columns = [f"{c[0]}_{c[1]}" if c[1] else c[0] for c in events.columns]
     events = events.reset_index()
@@ -170,6 +181,12 @@ def calculate_duration(
         rename_map["event_type_first"] = "event_type"
     if "magnitude_max" in events.columns:
         rename_map["magnitude_max"] = "max_magnitude"
+
+    # GHCN-Daily columns come through as colname_first after groupby flatten
+    for col in _ghcnd_cols:
+        flat = f"{col}_first"
+        if flat in events.columns:
+            rename_map[flat] = col
 
     events = events.rename(columns=rename_map)
 
@@ -342,16 +359,30 @@ def prepare_features(
             # location
             "fips_code",
             # operational timing
+            "month",
             "hour",
             "dayofweek",
             # early outage dynamics
             "initial_customers_affected",
             "delta_customers_affected_15m",
             "pct_growth_15m",
-            # weather severity
-            "weather_event_count",
+            # NOAA Storm Events context (named events only, ~7% coverage)
+            "has_weather_event",
             "max_magnitude",
             "magnitude_missing",
+            # GHCN-Daily measured weather (~91% coverage)
+            "prcp_mm",
+            "snow_mm",
+            "snwd_mm",
+            "tmax_c",
+            "tmin_c",
+            "awnd_ms",
+            "wt_fog",
+            "wt_thunder",
+            "wt_ice",
+            "wt_blowing_snow",
+            "wt_freezing_rain",
+            "wt_snow",
         ]
 
     # Keep only columns that actually exist (avoid crashing if a feature wasn't created)
@@ -406,10 +437,17 @@ def prepare_features(
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
     # ----------------------------
-    # 5) Drop rows with NaN ONLY in base features + target
+    # 5) Drop rows with NaN ONLY in core always-present features + target
     # ----------------------------
-    # Important: do NOT include event_type itself (we encoded it).
-    subset = base_available + [target_col]
+    # GHCN-Daily and weather event features are supplemental -- a missing
+    # value just means no nearby station reported that day, not bad data.
+    # Those NaNs get filled with 0 below. Only drop rows that are missing
+    # the features we know will always exist.
+    _core = {
+        "fips_code", "month", "hour", "dayofweek",
+        "initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m",
+    }
+    subset = [c for c in base_available if c in _core] + [target_col]
     before = len(df)
     df = df.dropna(subset=subset)
     dropped = before - len(df)

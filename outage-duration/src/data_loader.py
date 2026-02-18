@@ -347,16 +347,35 @@ def merge_weather_outages(
     weather = weather_df.copy()
 
     outages['date'] = outages['run_start_time'].dt.date
-    weather['date'] = weather['begin_date'].dt.date
 
-    # Select relevant weather columns to avoid bloating the merge
-    weather_cols = ['fips_code', 'date', 'event_type']
+    # Build expanded weather table: one row per (fips_code, date) covering
+    # the full event date range, not just begin_date.
+    # Previously only begin_date was used, so outages on day 2+ of a multi-day
+    # storm (winter storms, ice storms, floods) never matched.
+    weather_cols = ['fips_code', 'event_type']
     if 'magnitude' in weather.columns:
         weather_cols.append('magnitude')
 
-    weather_slim = weather[weather_cols].drop_duplicates()
+    wdf = weather[weather_cols + ['begin_date']].copy()
+    wdf['begin_date'] = pd.to_datetime(wdf['begin_date'])
 
-    merged = pd.merge(outages, weather_slim, on=['fips_code', 'date'], how='left')
+    if 'end_date' in weather.columns:
+        end_dt = pd.to_datetime(weather['end_date']).fillna(wdf['begin_date'])
+        # cap at 7 days so long-running events (droughts etc.) don't explode row count
+        max_end = wdf['begin_date'] + pd.Timedelta(days=7)
+        wdf['end_date'] = end_dt.where(end_dt <= max_end, max_end)
+    else:
+        wdf['end_date'] = wdf['begin_date']
+
+    print("[data_loader] Expanding weather events across date ranges (cap: 7 days) ...")
+    wdf['date'] = [
+        pd.date_range(start=r.begin_date, end=r.end_date, freq='D').date.tolist()
+        for r in wdf.itertuples()
+    ]
+    wdf = wdf.explode('date').drop(columns=['begin_date', 'end_date'])
+    wdf = wdf.drop_duplicates()
+
+    merged = pd.merge(outages, wdf, on=['fips_code', 'date'], how='left')
 
     matched = merged['event_type'].notna().sum()
     total = len(merged)
@@ -366,6 +385,78 @@ def merge_weather_outages(
     # Drop the temporary date column
     merged = merged.drop(columns=['date'])
 
+    return merged
+
+
+def load_ghcnd_weather(filepath: Union[str, Path]) -> pd.DataFrame:
+    """Load the GHCN-Daily county-day weather table produced by download_ghcnd_data.py.
+
+    Args:
+        filepath: Path to ghcnd_va_daily.csv.
+
+    Returns:
+        DataFrame with one row per (fips_code, date) and columns for
+        precipitation, temperature, wind, snow, and weather type flags.
+
+    Raises:
+        FileNotFoundError: If the file doesn't exist (run download_ghcnd_data.py first).
+    """
+    filepath = Path(filepath)
+    if not filepath.exists():
+        raise FileNotFoundError(
+            f"GHCN-Daily file not found: {filepath}. "
+            f"Run download_ghcnd_data.py first."
+        )
+
+    print(f"[data_loader] Loading GHCN-Daily weather from {filepath} ...")
+    df = pd.read_csv(filepath, dtype={"fips_code": str})
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+
+    print(
+        f"[data_loader] Loaded {len(df):,} county-day observations "
+        f"({df['fips_code'].nunique()} counties, "
+        f"{df['date'].min()} to {df['date'].max()})"
+    )
+    return df
+
+
+def merge_ghcnd_weather(
+    outages_df: pd.DataFrame,
+    ghcnd_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Merge EAGLE-I outage snapshots with GHCN-Daily county-day weather.
+
+    Joins on fips_code + date so every outage snapshot gets the measured
+    weather for that county on that day (~91% match rate vs ~7% for NOAA
+    Storm Events).
+
+    Args:
+        outages_df: EAGLE-I outage DataFrame (must have fips_code, run_start_time).
+        ghcnd_df: DataFrame from load_ghcnd_weather().
+
+    Returns:
+        Merged DataFrame with GHCN-Daily weather columns added.
+    """
+    for col in ["fips_code", "run_start_time"]:
+        if col not in outages_df.columns:
+            raise ValueError(f"outages_df missing required column: {col}")
+
+    print("[data_loader] Merging outage data with GHCN-Daily weather ...")
+
+    outages = outages_df.copy()
+    outages["date"] = outages["run_start_time"].dt.date
+
+    merged = pd.merge(outages, ghcnd_df, on=["fips_code", "date"], how="left")
+
+    # use prcp_mm as the coverage proxy (it's the most widely reported element)
+    matched = merged["prcp_mm"].notna().sum()
+    total = len(merged)
+    print(
+        f"[data_loader] GHCN-Daily merge: {total:,} records, "
+        f"{matched:,} ({matched / total * 100:.1f}%) matched to daily weather"
+    )
+
+    merged = merged.drop(columns=["date"])
     return merged
 
 

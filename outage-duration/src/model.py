@@ -33,7 +33,8 @@ class OutageDurationModel:
             'objective': 'reg:squarederror',
             'max_depth': 6,
             'learning_rate': 0.1,
-            'n_estimators': 100,
+            'n_estimators': 500,
+            'early_stopping_rounds': 50,
             'random_state': 42,
             'n_jobs': -1
         }

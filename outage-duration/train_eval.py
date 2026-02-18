@@ -5,6 +5,8 @@ from src.data_loader import (
     load_eagle_outages,
     load_noaa_weather,
     merge_weather_outages,
+    load_ghcnd_weather,
+    merge_ghcnd_weather,
 )
 from src.preprocessor import run_full_pipeline
 from src.model import OutageDurationModel
@@ -22,8 +24,14 @@ def main():
     weather_path = data_dir / "noaa_storm_events_va_2014_2022.csv"
     weather = load_noaa_weather(weather_path)
 
-    print("Merging datasets...")
+    print("Merging with NOAA Storm Events...")
     merged = merge_weather_outages(outages, weather)
+
+    print("Loading GHCN-Daily weather data...")
+    ghcnd = load_ghcnd_weather(data_dir / "ghcnd_va_daily.csv")
+
+    print("Merging with GHCN-Daily daily weather...")
+    merged = merge_ghcnd_weather(merged, ghcnd)
 
     print("Running preprocessing...")
     X, y = run_full_pipeline(merged)  # y is duration in minutes
@@ -37,7 +45,8 @@ def main():
     model = OutageDurationModel()
 
     # Train using raw minutes; model handles log internally
-    model.train(X_train, y_train)
+    # longWeight=2.0 upweights outages >= 4hr to improve long outage accuracy
+    model.train(X_train, y_train, longWeight=2.0)
 
     print("Evaluating...")
     preds = model.predict(X_test)  # already returns minutes
