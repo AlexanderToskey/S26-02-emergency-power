@@ -127,7 +127,7 @@ class OutageOccurrenceExplainer:
         # Otherwise display the plot
         if path:
             plt.savefig(path, bbox_inches="tight")
-            print("Single prediction plot saved to {path}")
+            print(f"Single prediction plot saved to {path}")
         else:
             plt.show()
 
