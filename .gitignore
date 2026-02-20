@@ -1,12 +1,13 @@
 # Ignore virtual environments
 venv/
 .env/
+.venv/
+**/.venv/
 __pycache__/
 *.pyc
 
 # Ignore large datasets
-data/*.csv
-data/*.json
+data/
 !data/sample.csv  # (optional: keep a tiny sample file)
 
 # Ignore model weights/checkpoints

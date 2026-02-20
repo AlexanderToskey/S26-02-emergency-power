@@ -1,3 +1,7 @@
+"""
+train_eval.py - Train and evaluate the Outage Scope Model
+"""
+
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 
@@ -9,8 +13,9 @@ from src.data_loader import (
     merge_ghcnd_weather,
 )
 from src.preprocessor import run_full_pipeline
-from src.model import OutageDurationModel
+from src.model import OutageScopeModel
 from src.evaluator import evaluateModel, printEvaluationReport
+from src.explainer import OutageExplainer
 
 
 def main():
@@ -34,30 +39,44 @@ def main():
     merged = merge_ghcnd_weather(merged, ghcnd)
 
     print("Running preprocessing...")
-    X, y = run_full_pipeline(merged)  # y is duration in minutes
+    # y is peak_customers_affected
+    X, y = run_full_pipeline(merged)  
 
     print("Splitting train/test...")
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
 
-    print("Training model (log-duration handled internally)...")
-    model = OutageDurationModel()
+    print("Training model (log-transform handled internally)...")
+    model = OutageScopeModel()
 
-    # Train using raw minutes; model handles log internally
-    # longWeight=2.0 upweights outages >= 4hr to improve long outage accuracy
-    model.train(X_train, y_train, longWeight=2.0)
+    # Train using raw customer counts; model handles log internally
+    # largeWeight=2.0 upweights large outages (>= 500 customers) 
+    model.train(X_train, y_train, largeWeight=2.0)
 
     print("Evaluating...")
-    preds = model.predict(X_test)  # already returns minutes
+    preds = model.predict(X_test)  # returns customer counts
 
     metrics = evaluateModel(y_test.values, preds)
     printEvaluationReport(metrics)
 
-    print("\nTop feature importances:")
+    print("\nTop feature importances (XGBoost Native):")
     importances = model.getFeatureImportances()
     for k, v in sorted(importances.items(), key=lambda x: x[1], reverse=True)[:15]:
         print(f"{k:30s} {v:.4f}")
+
+    # Hooking up the explainer
+    # print("\nGenerating SHAP Explanations...")
+    # try:
+    #     explainer = OutageExplainer(model, X_train)
+        
+    #     # We'll use the test set for the summary plot to see how features 
+    #     # drove the predictions on unseen data.
+    #     explainer.plotSummary(X_test, savePath="shap_summary.png")
+    #     print("SHAP summary plot saved successfully to 'shap_summary.png'.")
+        
+    # except Exception as e:
+    #     print(f"Warning: Could not generate SHAP plots. Error: {e}")
 
 
 if __name__ == "__main__":
