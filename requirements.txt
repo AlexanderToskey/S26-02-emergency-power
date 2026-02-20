@@ -1,43 +1,7 @@
-# Python version
-# Requires Python >= 3.9 (tested with 3.9.6)
-# Create and activate a virtual environment before installing.
-# macOS/Linux:
-#   python3 -m venv ml_lectures_env && source ml_lectures_env/bin/activate
-# Windows:
-#   py -3 -m venv ml_lectures_env && ml_lectures_env\\Scripts\\activate
-
-# Core Data Science
-numpy>=1.21.0
-pandas>=1.3.0
-matplotlib>=3.4.0
-seaborn>=0.11.0
-scipy>=1.7.0
-
-# Machine Learning
-scikit-learn>=1.0.0
-
-# Deep Learning
-torch==2.2.2
-torchvision==0.17.2
-
-# Jupyter
-jupyter>=1.0.0
-ipykernel>=6.0.0
-ipython>=7.0.0
-jupytext>=1.17.3
-
-# Additional Visualization
-plotly>=5.0.0
-
-# For data loading
-requests>=2.25.0
-
-# For working with Jupyter notebooks
-nbconvert>=6.0.0
-
-# For better progress bars
-tqdm>=4.62.0
-
-# Image processing (for HOG features)
-scikit-image>=0.20.0
-
+xgboost>=1.7.0
+pandas>=1.5.0
+numpy>=1.23.0
+scikit-learn>=1.2.0
+shap>=0.42.0
+matplotlib>=3.6.0
+joblib>=1.2.0

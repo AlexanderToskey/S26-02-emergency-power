@@ -10,6 +10,8 @@ from src.data_loader import (
     load_eagle_outages,
     load_noaa_weather,
     merge_weather_outages,
+    load_ghcnd_weather,      # Added
+    merge_ghcnd_weather,     # Added
     validate_data,
 )
 from src.preprocessor import run_full_pipeline
@@ -50,8 +52,12 @@ def main():
     # --- Step 4: Merge weather with outages ---
     print("\n>>> STEP 4: Merging weather and outage data")
     merged = merge_weather_outages(outages, weather)
+    
+    print("    Loading GHCN-Daily weather data...")
+    ghcnd = load_ghcnd_weather(data_dir / "ghcnd_va_daily.csv")
+    merged = merge_ghcnd_weather(merged, ghcnd)
+    
     print(f"    Merged shape: {merged.shape}")
-    print(merged.head())
 
     # --- Step 5: Run full preprocessing pipeline ---
     print("\n>>> STEP 5: Running full preprocessing pipeline")
