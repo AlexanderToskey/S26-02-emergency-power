@@ -247,7 +247,7 @@ def prepare_features(
 
     if feature_cols is None:
         feature_cols = [
-            "fips_code", "month", "hour", "dayofweek",
+            "fips_code", "year", "month", "hour", "dayofweek",
             "initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m",
             "has_weather_event", "max_magnitude", "magnitude_missing",
             "prcp_mm", "snow_mm", "snwd_mm", "tmax_c", "tmin_c", "awnd_ms",
