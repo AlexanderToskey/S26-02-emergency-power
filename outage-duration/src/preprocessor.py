@@ -157,8 +157,9 @@ def calculate_duration(
     # Use "first" since GHCN data is daily -- all snapshots on the same day
     # have the same value, and we want the weather at outage START.
     _ghcnd_cols = [
-        "prcp_mm", "snow_mm", "snwd_mm", "tmax_c", "tmin_c", "awnd_ms",
-        "wt_fog", "wt_thunder", "wt_ice", "wt_blowing_snow", "wt_freezing_rain", "wt_snow",
+        "prcp_mm", "snow_mm", "snwd_mm", "tmax_c", "tmin_c", "awnd_ms", "wsfg_ms",
+        "wt_fog", "wt_thunder", "wt_ice", "wt_blowing_snow", "wt_drizzle",
+        "wt_rain", "wt_freezing_rain", "wt_snow",
     ]
     for col in _ghcnd_cols:
         if col in outage_rows.columns:
@@ -359,9 +360,13 @@ def prepare_features(
             # location
             "fips_code",
             # operational timing
+            "year",
             "month",
             "hour",
             "dayofweek",
+            # county historical patterns (strong classifier signal)
+            "county_median_duration",
+            "county_long_rate",
             # early outage dynamics
             "initial_customers_affected",
             "delta_customers_affected_15m",
@@ -377,10 +382,13 @@ def prepare_features(
             "tmax_c",
             "tmin_c",
             "awnd_ms",
+            "wsfg_ms",       # peak wind gust (more predictive of severe damage than avg wind)
             "wt_fog",
             "wt_thunder",
             "wt_ice",
             "wt_blowing_snow",
+            "wt_drizzle",
+            "wt_rain",
             "wt_freezing_rain",
             "wt_snow",
         ]
@@ -519,6 +527,25 @@ def run_full_pipeline(
 
     # Step 5: Extract temporal features on the event start_time
     df = extract_temporal_features(df, timestamp_col='start_time')
+
+    # Step 5b: Add county-level historical statistics
+    # These aggregate features capture each county's typical outage behavior
+    # (infrastructure age, tree density, crew response time, etc.) which are
+    # strong predictors of whether an outage will be short or long.
+    county_stats = (
+        df.groupby("fips_code")["duration_minutes"]
+        .agg(
+            county_median_duration="median",
+            county_long_rate=lambda x: (x >= 240).mean(),
+        )
+        .reset_index()
+    )
+    df = df.merge(county_stats, on="fips_code", how="left")
+    print(
+        f"[preprocessor] Added county historical features "
+        f"(mean long rate: {county_stats['county_long_rate'].mean():.3f}, "
+        f"counties: {len(county_stats)})"
+    )
 
     # Step 6: Prepare final features and target
     X, y = prepare_features(df)
