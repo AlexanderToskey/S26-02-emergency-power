@@ -1,10 +1,10 @@
 """
-train_eval.py - Train and evaluate the Outage Scope Model
+train_eval.py - Oracle Evaluation for the Two-Stage Outage Scope Model
+Tests the "Theoretical Maximum" of the specialists by using perfect routing.
 """
 
 import numpy as np
 from pathlib import Path
-from sklearn.model_selection import train_test_split
 
 from src.data_loader import (
     load_eagle_outages,
@@ -14,9 +14,8 @@ from src.data_loader import (
     merge_ghcnd_weather,
 )
 from src.preprocessor import run_full_pipeline
-from src.model import OutageScopeModel
+from src.two_stage_model import TwoStageOutageModel
 from src.evaluator import evaluateModel, printEvaluationReport
-from src.explainer import OutageExplainer
 
 
 def main():
@@ -39,15 +38,10 @@ def main():
     TEST_YEAR = 2022
     print(f"\n[!] TEMPORAL SPLIT: Training on 2014-{TEST_YEAR-1}, Testing on {TEST_YEAR}")
     
-    # Create masks based on the 'year' column we just added to the pipeline
     train_mask = X_full['year'] < TEST_YEAR
     test_mask = X_full['year'] == TEST_YEAR
 
-    # Define features to use for training (preventing memorization)
     INCLUDE_DYNAMIC_FEATURES = False 
-    
-    # We use 'year' for the split, but we MUST drop it before training 
-    # so the model doesn't "memorize" specific years.
     cols_to_drop = ['year']
     if not INCLUDE_DYNAMIC_FEATURES:
         print("[!] GENERALIZATION MODE: Removing growth features.")
@@ -55,77 +49,69 @@ def main():
 
     X = X_full.drop(columns=cols_to_drop)
 
-    # Apply the split manually
     X_train, y_train = X[train_mask], y[train_mask]
     X_test, y_test = X[test_mask], y[test_mask]
 
     print(f"  Train samples: {len(X_train):,}")
     print(f"  Test samples (Year {TEST_YEAR}): {len(X_test):,}")
 
-    THRESHOLD = 500
+    THRESHOLD = 500.0
 
-    # =========================================================================
-    # TIER 3: SPECIALIZED SCOPE REGRESSORS (ORACLE ROUTING)
-    # =========================================================================
+    # --- 4. Training ---
+    print("\n" + "="*50)
+    print("TRAINING SPECIALIZED SCOPE REGRESSORS")
+    print("="*50)
     
-    # 1. Split Training Data by ACTUAL Scope
-    train_large_mask = y_train >= THRESHOLD
-    train_small_mask = y_train < THRESHOLD
+    # Initialize and train the Two-Stage architecture
+    model = TwoStageOutageModel(thresholdMin=THRESHOLD)
+    model.train(X_train, y_train, validationSplit=0.2)
 
-    print(f"\n--- Training 'Small Specialist' (<{THRESHOLD} customers) ---")
-    print(f"Training on {train_small_mask.sum():,} events...")
-    model_small = OutageScopeModel()
-    model_small.train(X_train[train_small_mask], y_train[train_small_mask], largeWeight=1.0) 
+    # --- 5. ORACLE EVALUATION (Bypassing Stage 1) ---
+    print("\n" + "="*50)
+    print("ORACLE EVALUATION: PERFECT ROUTING")
+    print("="*50)
 
-    print(f"\n--- Training 'Large Specialist' (>={THRESHOLD} customers) ---")
-    print(f"Training on {train_large_mask.sum():,} events...")
-    model_large = OutageScopeModel()
-    model_large.train(X_train[train_large_mask], y_train[train_large_mask], largeWeight=1.0)
-
-    # 2. Split Testing Data by ACTUAL Scope (The "Perfect Gatekeeper" Assumption)
+    # Define the Oracle Masks based on ACTUAL values in the test set
     test_large_mask = y_test >= THRESHOLD
     test_small_mask = y_test < THRESHOLD
 
-    print("\n" + "="*50)
-    print("ORACLE EVALUATION: SMALL SPECIALIST")
-    print("="*50)
-    # Predict only on the actual small events
-    preds_small = model_small.predict(X_test[test_small_mask])
-    metrics_small = evaluateModel(y_test[test_small_mask].values, preds_small)
-    printEvaluationReport(metrics_small)
+    # Initialize final prediction array
+    final_preds = np.empty_like(y_test, dtype=float)
 
-    print("\n" + "="*50)
-    print("ORACLE EVALUATION: LARGE SPECIALIST")
-    print("="*50)
-    # Predict only on the actual large events
-    preds_large = model_large.predict(X_test[test_large_mask])
-    metrics_large = evaluateModel(y_test[test_large_mask].values, preds_large)
-    printEvaluationReport(metrics_large)
+    # 5a. Small Specialist Oracle Run
+    if test_small_mask.sum() > 0:
+        print(f"Routing {test_small_mask.sum():,} actual small events to Small Specialist...")
+        # We access the sub-regressor directly to skip the internal classifier
+        # Note: Regressor predicts log1p, so we must expm1 it.
+        pred_log_small = model.shortRegressor.predict(X_test[test_small_mask])
+        final_preds[test_small_mask] = np.expm1(np.clip(pred_log_small, -20, 20))
 
-    # 3. Combine for the "Theoretical Maximum" Overall Pipeline Score
+    # 5b. Large Specialist Oracle Run
+    if test_large_mask.sum() > 0:
+        print(f"Routing {test_large_mask.sum():,} actual large events to Large Specialist...")
+        pred_log_large = model.longRegressor.predict(X_test[test_large_mask])
+        final_preds[test_large_mask] = np.expm1(np.clip(pred_log_large, -20, 20))
+
+    # --- 6. Final Oracle Report ---
     print("\n" + "="*50)
-    print("THEORETICAL MAXIMUM COMBINED PIPELINE PERFORMANCE")
+    print("THEORETICAL MAXIMUM PIPELINE PERFORMANCE")
     print("="*50)
     
-    # Recombine the arrays exactly as they appear in y_test
-    final_preds = np.empty_like(y_test, dtype=float)
-    final_preds[test_small_mask] = preds_small
-    final_preds[test_large_mask] = preds_large
+    metrics = evaluateModel(y_test.values, final_preds)
+    printEvaluationReport(metrics)
 
-    metrics_combined = evaluateModel(y_test.values, final_preds)
-    printEvaluationReport(metrics_combined)
-
-    print("\nTop Features for Large Specialist:")
-    importances = model_large.getFeatureImportances()
-    for k, v in sorted(importances.items(), key=lambda x: x[1], reverse=True)[:5]:
+    print("\nTop Features for Large Specialist (Oracle Context):")
+    l_imp = model.getLongRegressorImportances()
+    for k, v in sorted(l_imp.items(), key=lambda x: x[1], reverse=True)[:5]:
         print(f"  {k:30s} {v:.4f}")
 
-    # --- 6. Explainer (Optional) ---
-    # Uncomment the block below to generate the SHAP summary plot
+    # --- 7. Explainer (Optional) ---
     """
     print("\nGenerating SHAP Explanations...")
     try:
-        explainer = OutageExplainer(model, X_train)
+        # Note: Explainer currently only supports single-stage XGB models. 
+        # You would need to pass model.classifier or model.longRegressor directly.
+        explainer = OutageExplainer(model.classifier, X_train)
         explainer.plotSummary(X_test, savePath="shap_summary.png")
         print("SHAP summary plot saved to 'shap_summary.png'.")
     except Exception as e:
