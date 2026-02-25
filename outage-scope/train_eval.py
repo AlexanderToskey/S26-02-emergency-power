@@ -2,6 +2,7 @@
 train_eval.py - Train and evaluate the Outage Scope Model
 """
 
+import numpy as np
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 
@@ -21,63 +22,115 @@ from src.explainer import OutageExplainer
 def main():
     data_dir = Path("data")
 
-    print("\nLoading outage data...")
+    # --- 1. Data Ingestion ---
+    print("\nLoading data and merging...")
     eagle_files = sorted(data_dir.glob("eaglei_outages_*.csv"))
     outages = load_eagle_outages(eagle_files)
-
-    print("Loading weather data...")
-    weather_path = data_dir / "noaa_storm_events_va_2014_2022.csv"
-    weather = load_noaa_weather(weather_path)
-
-    print("Merging with NOAA Storm Events...")
+    weather = load_noaa_weather(data_dir / "noaa_storm_events_va_2014_2022.csv")
     merged = merge_weather_outages(outages, weather)
-
-    print("Loading GHCN-Daily weather data...")
     ghcnd = load_ghcnd_weather(data_dir / "ghcnd_va_daily.csv")
-
-    print("Merging with GHCN-Daily daily weather...")
     merged = merge_ghcnd_weather(merged, ghcnd)
 
-    print("Running preprocessing...")
-    # y is peak_customers_affected
-    X, y = run_full_pipeline(merged)  
+    # --- 2. Preprocessing ---
+    print("\nRunning preprocessing pipeline...")
+    X_full, y = run_full_pipeline(merged)
 
-    print("Splitting train/test...")
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+    # --- 3. Temporal Split Logic ---
+    TEST_YEAR = 2022
+    print(f"\n[!] TEMPORAL SPLIT: Training on 2014-{TEST_YEAR-1}, Testing on {TEST_YEAR}")
+    
+    # Create masks based on the 'year' column we just added to the pipeline
+    train_mask = X_full['year'] < TEST_YEAR
+    test_mask = X_full['year'] == TEST_YEAR
 
-    print("Training model (log-transform handled internally)...")
-    model = OutageScopeModel()
+    # Define features to use for training (preventing memorization)
+    INCLUDE_DYNAMIC_FEATURES = False 
+    
+    # We use 'year' for the split, but we MUST drop it before training 
+    # so the model doesn't "memorize" specific years.
+    cols_to_drop = ['year']
+    if not INCLUDE_DYNAMIC_FEATURES:
+        print("[!] GENERALIZATION MODE: Removing growth features.")
+        cols_to_drop += ["initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m"]
 
-    # Train using raw customer counts; model handles log internally
-    # largeWeight=2.0 upweights large outages (>= 500 customers) 
-    model.train(X_train, y_train, largeWeight=2.0)
+    X = X_full.drop(columns=cols_to_drop)
 
-    print("Evaluating...")
-    preds = model.predict(X_test)  # returns customer counts
+    # Apply the split manually
+    X_train, y_train = X[train_mask], y[train_mask]
+    X_test, y_test = X[test_mask], y[test_mask]
 
-    metrics = evaluateModel(y_test.values, preds)
-    printEvaluationReport(metrics)
+    print(f"  Train samples: {len(X_train):,}")
+    print(f"  Test samples (Year {TEST_YEAR}): {len(X_test):,}")
 
-    print("\nTop feature importances (XGBoost Native):")
-    importances = model.getFeatureImportances()
-    for k, v in sorted(importances.items(), key=lambda x: x[1], reverse=True)[:15]:
-        print(f"{k:30s} {v:.4f}")
+    THRESHOLD = 500
 
-    # Hooking up the explainer
-    # print("\nGenerating SHAP Explanations...")
-    # try:
-    #     explainer = OutageExplainer(model, X_train)
-        
-    #     # We'll use the test set for the summary plot to see how features 
-    #     # drove the predictions on unseen data.
-    #     explainer.plotSummary(X_test, savePath="shap_summary.png")
-    #     print("SHAP summary plot saved successfully to 'shap_summary.png'.")
-        
-    # except Exception as e:
-    #     print(f"Warning: Could not generate SHAP plots. Error: {e}")
+    # =========================================================================
+    # TIER 3: SPECIALIZED SCOPE REGRESSORS (ORACLE ROUTING)
+    # =========================================================================
+    
+    # 1. Split Training Data by ACTUAL Scope
+    train_large_mask = y_train >= THRESHOLD
+    train_small_mask = y_train < THRESHOLD
 
+    print(f"\n--- Training 'Small Specialist' (<{THRESHOLD} customers) ---")
+    print(f"Training on {train_small_mask.sum():,} events...")
+    model_small = OutageScopeModel()
+    model_small.train(X_train[train_small_mask], y_train[train_small_mask], largeWeight=1.0) 
+
+    print(f"\n--- Training 'Large Specialist' (>={THRESHOLD} customers) ---")
+    print(f"Training on {train_large_mask.sum():,} events...")
+    model_large = OutageScopeModel()
+    model_large.train(X_train[train_large_mask], y_train[train_large_mask], largeWeight=1.0)
+
+    # 2. Split Testing Data by ACTUAL Scope (The "Perfect Gatekeeper" Assumption)
+    test_large_mask = y_test >= THRESHOLD
+    test_small_mask = y_test < THRESHOLD
+
+    print("\n" + "="*50)
+    print("ORACLE EVALUATION: SMALL SPECIALIST")
+    print("="*50)
+    # Predict only on the actual small events
+    preds_small = model_small.predict(X_test[test_small_mask])
+    metrics_small = evaluateModel(y_test[test_small_mask].values, preds_small)
+    printEvaluationReport(metrics_small)
+
+    print("\n" + "="*50)
+    print("ORACLE EVALUATION: LARGE SPECIALIST")
+    print("="*50)
+    # Predict only on the actual large events
+    preds_large = model_large.predict(X_test[test_large_mask])
+    metrics_large = evaluateModel(y_test[test_large_mask].values, preds_large)
+    printEvaluationReport(metrics_large)
+
+    # 3. Combine for the "Theoretical Maximum" Overall Pipeline Score
+    print("\n" + "="*50)
+    print("THEORETICAL MAXIMUM COMBINED PIPELINE PERFORMANCE")
+    print("="*50)
+    
+    # Recombine the arrays exactly as they appear in y_test
+    final_preds = np.empty_like(y_test, dtype=float)
+    final_preds[test_small_mask] = preds_small
+    final_preds[test_large_mask] = preds_large
+
+    metrics_combined = evaluateModel(y_test.values, final_preds)
+    printEvaluationReport(metrics_combined)
+
+    print("\nTop Features for Large Specialist:")
+    importances = model_large.getFeatureImportances()
+    for k, v in sorted(importances.items(), key=lambda x: x[1], reverse=True)[:5]:
+        print(f"  {k:30s} {v:.4f}")
+
+    # --- 6. Explainer (Optional) ---
+    # Uncomment the block below to generate the SHAP summary plot
+    """
+    print("\nGenerating SHAP Explanations...")
+    try:
+        explainer = OutageExplainer(model, X_train)
+        explainer.plotSummary(X_test, savePath="shap_summary.png")
+        print("SHAP summary plot saved to 'shap_summary.png'.")
+    except Exception as e:
+        print(f"Warning: Could not generate SHAP plots. Error: {e}")
+    """
 
 if __name__ == "__main__":
     main()

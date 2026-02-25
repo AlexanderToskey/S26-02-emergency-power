@@ -32,9 +32,10 @@ class OutageScopeModel:
         """
         self.defaultParams = {
             'objective': 'reg:squarederror',
-            'max_depth': 6,
-            'learning_rate': 0.1,
-            'n_estimators': 500,
+            'max_depth': 5,
+            'learning_rate': 0.05,
+            'reg_lambda': 10,
+            'n_estimators': 1000,
             'early_stopping_rounds': 50,
             'random_state': 42,
             'n_jobs': -1
