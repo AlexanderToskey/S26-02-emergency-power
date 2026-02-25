@@ -2,6 +2,7 @@
 train_eval.py - Train and evaluate the Outage Scope Model
 """
 
+import numpy as np
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 
@@ -61,21 +62,62 @@ def main():
     print(f"  Train samples: {len(X_train):,}")
     print(f"  Test samples (Year {TEST_YEAR}): {len(X_test):,}")
 
-    # --- 4. Training ---
-    # NOTE: Do NOT call train_test_split here, or it will overwrite the temporal split.
-    print(f"\nTraining OutageScopeModel on {X.shape[1]} features...")
-    model = OutageScopeModel()
-    model.train(X_train, y_train, largeWeight=4.0)
+    THRESHOLD = 500
 
-    # --- 5. Evaluation ---
-    print("\nEvaluating results on 2022 data...")
-    preds = model.predict(X_test)
-    metrics = evaluateModel(y_test.values, preds)
-    printEvaluationReport(metrics)
+    # =========================================================================
+    # TIER 3: SPECIALIZED SCOPE REGRESSORS (ORACLE ROUTING)
+    # =========================================================================
+    
+    # 1. Split Training Data by ACTUAL Scope
+    train_large_mask = y_train >= THRESHOLD
+    train_small_mask = y_train < THRESHOLD
 
-    print("\nTop 15 Feature Importances:")
-    importances = model.getFeatureImportances()
-    for k, v in sorted(importances.items(), key=lambda x: x[1], reverse=True)[:15]:
+    print(f"\n--- Training 'Small Specialist' (<{THRESHOLD} customers) ---")
+    print(f"Training on {train_small_mask.sum():,} events...")
+    model_small = OutageScopeModel()
+    model_small.train(X_train[train_small_mask], y_train[train_small_mask], largeWeight=1.0) 
+
+    print(f"\n--- Training 'Large Specialist' (>={THRESHOLD} customers) ---")
+    print(f"Training on {train_large_mask.sum():,} events...")
+    model_large = OutageScopeModel()
+    model_large.train(X_train[train_large_mask], y_train[train_large_mask], largeWeight=1.0)
+
+    # 2. Split Testing Data by ACTUAL Scope (The "Perfect Gatekeeper" Assumption)
+    test_large_mask = y_test >= THRESHOLD
+    test_small_mask = y_test < THRESHOLD
+
+    print("\n" + "="*50)
+    print("ORACLE EVALUATION: SMALL SPECIALIST")
+    print("="*50)
+    # Predict only on the actual small events
+    preds_small = model_small.predict(X_test[test_small_mask])
+    metrics_small = evaluateModel(y_test[test_small_mask].values, preds_small)
+    printEvaluationReport(metrics_small)
+
+    print("\n" + "="*50)
+    print("ORACLE EVALUATION: LARGE SPECIALIST")
+    print("="*50)
+    # Predict only on the actual large events
+    preds_large = model_large.predict(X_test[test_large_mask])
+    metrics_large = evaluateModel(y_test[test_large_mask].values, preds_large)
+    printEvaluationReport(metrics_large)
+
+    # 3. Combine for the "Theoretical Maximum" Overall Pipeline Score
+    print("\n" + "="*50)
+    print("THEORETICAL MAXIMUM COMBINED PIPELINE PERFORMANCE")
+    print("="*50)
+    
+    # Recombine the arrays exactly as they appear in y_test
+    final_preds = np.empty_like(y_test, dtype=float)
+    final_preds[test_small_mask] = preds_small
+    final_preds[test_large_mask] = preds_large
+
+    metrics_combined = evaluateModel(y_test.values, final_preds)
+    printEvaluationReport(metrics_combined)
+
+    print("\nTop Features for Large Specialist:")
+    importances = model_large.getFeatureImportances()
+    for k, v in sorted(importances.items(), key=lambda x: x[1], reverse=True)[:5]:
         print(f"  {k:30s} {v:.4f}")
 
     # --- 6. Explainer (Optional) ---
