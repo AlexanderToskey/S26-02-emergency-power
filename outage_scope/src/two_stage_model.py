@@ -24,7 +24,7 @@ from sklearn.metrics import f1_score
 CUSTOMER_THRESHOLD = 500.0
 
 
-class TwoStageOutageModel:
+class TwoStageScopeModel:
     """
     Two-stage model for outage scope prediction.
 

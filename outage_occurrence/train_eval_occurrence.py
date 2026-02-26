@@ -15,7 +15,7 @@ from occurrence_explainer_model import OutageOccurrenceExplainer
 
 
 def main():
-    data_dir = Path("data")
+    data_dir = Path("../data")
 
     # ------------------------------------------------------------------
     # STEP 1: Load outage data
@@ -81,6 +81,16 @@ def main():
 
     metrics = evaluateModel(y_test.values, y_pred, y_prob)
     printEvaluationReport(metrics)
+
+    # ------------------------------------------------------------------
+    # STEP 8.5: Save Model to Central Directory
+    # ------------------------------------------------------------------
+    print("\nSaving occurrence model...")
+    model_dir = Path("../models")
+    model_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Assuming OutageOccurrenceModel has a save() method
+    model.save(model_dir / "occurrence_model.joblib")
 
     # ------------------------------------------------------------------
     # STEP 9: Feature importance

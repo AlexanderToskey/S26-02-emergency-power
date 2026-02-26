@@ -14,12 +14,12 @@ from src.data_loader import (
     merge_ghcnd_weather,
 )
 from src.preprocessor import run_full_pipeline
-from src.two_stage_model import TwoStageOutageModel
+from src.two_stage_model import TwoStageScopeModel
 from src.evaluator import evaluateModel, printEvaluationReport
 
 
 def main():
-    data_dir = Path("data")
+    data_dir = Path("../data")
 
     # --- 1. Data Ingestion ---
     print("\nLoading data and merging...")
@@ -63,7 +63,7 @@ def main():
     print("="*50)
     
     # Initialize and train the Two-Stage architecture
-    model = TwoStageOutageModel(thresholdMin=THRESHOLD)
+    model = TwoStageScopeModel(thresholdMin=THRESHOLD)
     model.train(X_train, y_train, validationSplit=0.2)
 
     # --- 5. ORACLE EVALUATION (Bypassing Stage 1) ---
@@ -104,6 +104,13 @@ def main():
     l_imp = model.getLongRegressorImportances()
     for k, v in sorted(l_imp.items(), key=lambda x: x[1], reverse=True)[:5]:
         print(f"  {k:30s} {v:.4f}")
+
+    # --- 6.5 Save Scope Model ---
+    print("\nSaving two-stage scope model...")
+    model_dir = Path("../models")
+    model_dir.mkdir(parents=True, exist_ok=True)
+    
+    model.save(model_dir / "scope_model.joblib")
 
     # --- 7. Explainer (Optional) ---
     """

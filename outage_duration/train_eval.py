@@ -24,7 +24,7 @@ USE_TWO_STAGE = True
 
 
 def main():
-    data_dir = Path("data")
+    data_dir = Path("../data")
 
     print("\nLoading outage data...")
     eagle_files = sorted(data_dir.glob("eaglei_outages_*.csv"))
@@ -96,6 +96,13 @@ def main():
             twoStage.getLongRegressorImportances().items(), key=lambda x: x[1], reverse=True
         )[:10]:
             print(f"  {k:30s} {v:.4f}")
+
+        print("\nSaving two-stage duration model...")
+        model_dir = Path("../models")
+        model_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save the two-stage model
+        twoStage.save(model_dir / "duration_model.joblib")
 
     else:
         # ── Single-stage model only ────────────────────────────────────────────
