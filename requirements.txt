@@ -5,3 +5,4 @@ scikit-learn>=1.2.0
 shap>=0.42.0
 matplotlib>=3.6.0
 joblib>=1.2.0
+Flask>=2.3.2
