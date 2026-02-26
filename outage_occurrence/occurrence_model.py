@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 from sklearn.model_selection import train_test_split
 
-class OutageOccurenceModel:
+class OutageOccurrenceModel:
 
     def __init__(self, model_params: Optional[Dict[str, Any]]=None):
 
@@ -87,7 +87,7 @@ class OutageOccurenceModel:
         }, path)
 
     @classmethod
-    def load(cls, path: str) -> 'OutageOccurenceModel':
+    def load(cls, path: str) -> 'OutageOccurrenceModel':
         
         # Convert the path string to a Path object
         path = Path(path)
