@@ -20,6 +20,7 @@ from outage_occurrence.data_loader_occurrence import build_occurrence_labels, me
 from outage_occurrence.preprocessor_occurrence import run_full_pipeline as run_occ_pipeline
 from outage_occurrence.evaluator_occurrence import evaluateModel as evaluate_occ
 from outage_occurrence.evaluator_occurrence import printEvaluationReport as print_occ_report
+from outage_occurrence.occurrence_model import OutageOccurrenceModel
 
 # --- Event (Scope) Imports ---
 from outage_scope.src.data_loader import (
@@ -42,17 +43,19 @@ def main():
     print("INITIALIZING PREDICTIVE INTELLIGENCE SUITE")
     print("="*60)
 
-    data_dir = Path("data")
-    models_dir = Path("models")
+    # Get the base directory and get the data and model directories
+    BASE_DIR = Path(__file__).resolve().parent
+    data_dir = BASE_DIR / "data"
+    models_dir = BASE_DIR / "models"
 
     # =========================================================================
     # STEP 1: LOAD ALL MODELS
     # =========================================================================
     print("\n[1] Loading Serialized Models from /models...")
     try:
-        # occ_model = joblib.load(models_dir / "occurrence_model.joblib")
+        occ_model = OutageOccurrenceModel.load(models_dir / "occurrence_model.joblib")
         scope_model = TwoStageScopeModel.load(models_dir / "scope_model.joblib")
-        # dur_model = TwoStageOutageModel.load(models_dir / "duration_model.joblib")
+        dur_model = TwoStageOutageModel.load(models_dir / "duration_model.joblib")
         print("  -> Models loaded successfully.")
     except Exception as e:
         print(f"  [ERROR] Could not load models: {e}")
@@ -67,11 +70,14 @@ def main():
     ghcnd = load_ghcnd_weather(data_dir / "ghcnd_va_daily.csv")
     weather = load_noaa_weather(data_dir / "noaa_storm_events_va_2014_2022.csv")
 
+    # Occurrence dataset
     print("\n--- Building Occurrence (County-Day) Dataset ---")
+    #print(outages.columns)
     occurrence_labels = build_occurrence_labels(outages)
     merged_occ = merge_occurrence_with_weather(occurrence_labels, ghcnd)
     X_occ_full, y_occ_full = run_occ_pipeline(merged_occ)
 
+    # Scope and duration datasets
     print("\n--- Building Event (Scope & Duration) Datasets ---")
     merged_event = merge_weather_outages(outages, weather)
     merged_event = merge_ghcnd_weather(merged_event, ghcnd)
@@ -105,7 +111,7 @@ def main():
     cols_to_drop = ['year', 'initial_customers_affected', 'delta_customers_affected_15m', 'pct_growth_15m']
     X_scope_test = X_scope_test.drop(columns=[c for c in cols_to_drop if c in X_scope_test.columns])
     X_dur_test = X_dur_test.drop(columns=[c for c in cols_to_drop if c in X_dur_test.columns])
-    X_occ_test = X_occ_test.drop(columns=['year'], errors='ignore')
+    X_occ_test = X_occ_test.drop(columns=[c for c in cols_to_drop if c in X_occ_test.columns])
 
     print(f"  Occurrence Test Samples: {len(X_occ_test):,}")
     print(f"  Event Test Samples:      {len(X_scope_test):,}")

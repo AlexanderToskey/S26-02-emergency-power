@@ -444,7 +444,7 @@ def merge_ghcnd_weather(
     print("[data_loader] Merging outage data with GHCN-Daily weather ...")
 
     outages = outages_df.copy()
-    outages["date"] = outages["run_start_time"].dt.date
+    outages["date"] = outages["run_start_time"].dt.normalize()
 
     merged = pd.merge(outages, ghcnd_df, on=["fips_code", "date"], how="left")
 
