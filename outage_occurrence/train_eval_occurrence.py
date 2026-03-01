@@ -15,7 +15,10 @@ from occurrence_explainer_model import OutageOccurrenceExplainer
 
 
 def main():
-    data_dir = Path("data")
+    # Get the base directory and get the data and model directories
+    BASE_DIR = Path(__file__).resolve().parent
+    data_dir = BASE_DIR / "data"
+    model_dir = BASE_DIR / "models"
 
     # ------------------------------------------------------------------
     # STEP 1: Load outage data
@@ -23,6 +26,11 @@ def main():
     print("\nLoading outage data...")
     eagle_files = sorted(data_dir.glob("eaglei_outages_*.csv"))
     outages = load_eagle_outages(eagle_files)
+
+    # Fix column naming for standalone training
+    # Some older CSVs might have 'customers_out', but build_occurrence_labels expects 'customers_affected'
+    if 'customers_out' in outages.columns and 'customers_affected' not in outages.columns:
+        outages = outages.rename(columns={'customers_out': 'customers_affected'})
 
     # ------------------------------------------------------------------
     # STEP 2: Build county-day occurrence labels
@@ -49,6 +57,13 @@ def main():
     # ------------------------------------------------------------------
     print("Running preprocessing...")
     X, y = run_full_pipeline(merged)  # y = outage_occurred (0/1)
+
+    # ------------------------------------------------------------------
+    # STEP 5b: Remove year column to avoid SHAP/feature mismatch
+    # ------------------------------------------------------------------
+    if "year" in X.columns:
+        print("[preprocessor] Dropping 'year' from features to avoid single-use leakage...")
+        X = X.drop(columns=["year"])
 
     # ------------------------------------------------------------------
     # STEP 6: Train/Test split
@@ -86,7 +101,7 @@ def main():
     # STEP 8.5: Save Model to Central Directory
     # ------------------------------------------------------------------
     print("\nSaving occurrence model...")
-    model_dir = Path("models")
+    #model_dir = Path("models")
     model_dir.mkdir(parents=True, exist_ok=True)
     
     # Assuming OutageOccurrenceModel has a save() method

@@ -70,7 +70,8 @@ def merge_occurrence_with_weather(
 
     print("[data_loader] Merging occurrence labels with weather ...")
 
-    occurrence_df['date'] = pd.to_datetime(occurrence_df['date'])
+    occurrence_df["date"] = pd.to_datetime(occurrence_df["date"]).dt.normalize()
+    ghcnd_df["date"] = pd.to_datetime(ghcnd_df["date"]).dt.normalize()
 
     merged = pd.merge(
         ghcnd_df,
@@ -107,18 +108,18 @@ def build_occurrence_labels(outages_df: pd.DataFrame) -> pd.DataFrame:
             outage_occurred (0/1)
             max_customers_affected
     """
-    required_cols = ["fips_code", "run_start_time", "customers_out"]
+    required_cols = ["fips_code", "run_start_time", "customers_affected"]
     for col in required_cols:
         if col not in outages_df.columns:
             raise ValueError(f"outages_df missing required column: {col}")
 
     df = outages_df.copy()
-    df["date"] = df["run_start_time"].dt.date
+    df["date"] = pd.to_datetime(df["run_start_time"]).dt.normalize()
 
     grouped = (
         df.groupby(["fips_code", "date"])
         .agg(
-            max_customers_affected=("customers_out", "max"),
+            max_customers_affected=("customers_affected", "max"),
         )
         .reset_index()
     )
@@ -139,14 +140,14 @@ def build_occurrence_labels(outages_df: pd.DataFrame) -> pd.DataFrame:
 def load_ghcnd_weather(file_path):
     """Load GHCN-Daily weather data."""
     ghcnd = pd.read_csv(file_path)
-    ghcnd["date"] = pd.to_datetime(ghcnd["date"])
+    ghcnd["date"] = pd.to_datetime(ghcnd["date"]).dt.normalize()
     return ghcnd
 
 
 def merge_ghcnd_weather(merged, ghcnd):
     """Merge daily weather features onto outage dataset."""
-    merged["date"] = merged["run_start_time"].dt.date
-    ghcnd["date"] = ghcnd["date"].dt.date
+    merged["date"] = merged["run_start_time"].dt.normalize()
+    ghcnd["date"] = pd.to_datetime(ghcnd["date"]).dt.normalize()
 
     merged = merged.merge(ghcnd, on="date", how="left")
 
