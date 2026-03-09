@@ -1,4 +1,4 @@
-let map = L.map('map').setView([37.8, -78.5], 7);  // Centered on VA
+let map = L.map('map').setView([37.8, -78.5], 7);
 
 // Base map
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -8,7 +8,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 let predictions = {};
 let geojson;
 
-// Style function
+// Style counties
 function styleFunction(feature) {
 
     const fips = feature.properties.GEOID;
@@ -18,28 +18,25 @@ function styleFunction(feature) {
         return { color: "#999", weight: 1, fillOpacity: 0.3 };
     }
 
-    // Color severity based on scope
-    if (countyData.scope > 5000) return { fillColor: "red", weight: 1, color: "black", fillOpacity: 0.7 };
-    if (countyData.scope > 1000) return { fillColor: "orange", weight: 1, color: "black", fillOpacity: 0.6 };
-    return { fillColor: "yellow", fillOpacity: 0.5 };
+    if (countyData.scope > 5000)
+        return { fillColor: "red", weight: 1, color: "black", fillOpacity: 0.7 };
 
-    return {
-        fillColor: "#9ecae1",
-        weight: 1,
-        opacity: 1,
-        color: 'blue',
-        fillOpacity: 0.5
-    };
+    if (countyData.scope > 1000)
+        return { fillColor: "orange", weight: 1, color: "black", fillOpacity: 0.6 };
+
+    return { fillColor: "yellow", weight: 1, color: "black", fillOpacity: 0.6 };
 }
 
-// Tooltip function
+// Tooltip behavior
 function onEachFeature(feature, layer) {
+
     const fips = String(feature.properties.GEOID);
     const name = feature.properties.NAME;
     const data = predictions[fips];
 
     layer.on({
-        mouseover: function(e) {
+
+        mouseover: function () {
             let props;
             if (data && data.occurrence) {
                 props = `
@@ -51,33 +48,146 @@ function onEachFeature(feature, layer) {
             } else {
                 props = `<b>${name} County</b><br/>No Outage Predicted`;
             }
-
             layer.bindTooltip(props).openTooltip();
             layer.setStyle({ weight: 3 });
         },
-        mouseout: function(e) {
+
+        mouseout: function () {
             layer.closeTooltip();
             geojson.resetStyle(layer);
         }
     });
 }
 
-// Fetch counties and predictions, then render map
+
+// Populate sidebar
+function populateSidebar(countiesData) {
+
+    const list = document.getElementById("outageList");
+    list.innerHTML = "";
+
+    countiesData.features.forEach(feature => {
+
+        const fips = String(feature.properties.GEOID);
+        const name = feature.properties.NAME;
+        const data = predictions[fips];
+
+        if (data && data.occurrence) {
+
+            const row = document.createElement("tr");
+            row.className = "outage-row";
+
+            // Determine severity
+            let severity = "yellow";
+            let label = "Minor";
+
+            if (data.scope > 5000) {
+                severity = "red";
+                label = "Severe";
+            } 
+            else if (data.scope > 1000) {
+                severity = "orange";
+                label = "Moderate";
+            }
+
+            row.innerHTML = `
+                <td>${name} County</td>
+                <td><span class="badge ${severity}">${label}</span></td>
+            `;
+
+            // Helper to find county layer
+            function getLayer() {
+                let found = null;
+                geojson.eachLayer(layer => {
+                    if (layer.feature.properties.GEOID === fips) {
+                        found = layer;
+                    }
+                });
+                return found;
+            }
+
+            // Hover highlight
+            row.addEventListener("mouseenter", () => {
+                const layer = getLayer();
+                if (layer) {
+                    layer.setStyle({
+                        weight: 4,
+                        color: "blue"
+                    });
+                }
+            });
+
+            row.addEventListener("mouseleave", () => {
+                const layer = getLayer();
+                if (layer) {
+                    geojson.resetStyle(layer);
+                }
+            });
+
+            // Click zoom
+            row.addEventListener("click", () => {
+
+                const layer = getLayer();
+
+                if (layer) {
+
+                    map.fitBounds(layer.getBounds(), { padding:[200,200]});
+
+                    layer.setStyle({
+                        weight: 4,
+                        color: "blue"
+                    });
+
+                    const tooltipContent = `
+                        <b>${name} County</b><br/>
+                        Outage Predicted<br/>
+                        Projected # of Affected Customers: ${data.scope}<br/>
+                        Projected Outage Duration: ${data.duration} hrs
+                    `;
+
+                    layer.bindTooltip(tooltipContent).openTooltip();
+
+                    setTimeout(() => {
+                        geojson.resetStyle(layer);
+                    }, 3000);
+                }
+            });
+
+            list.appendChild(row);
+        }
+    });
+}
+
+// Fetch data
 Promise.all([
     fetch("/api/counties").then(r => r.json()),
     fetch("/api/predictions").then(r => r.json())
 ]).then(([countiesData, preds]) => {
-
+    // Get the outage predictions
     predictions = preds;
 
-    // Filter Virginia only
+    // Extract only the Virginia counties
     const virginiaCounties = {
         type: "FeatureCollection",
         features: countiesData.features.filter(f => f.properties.STATEFP === "51")
     };
 
+    // Add each county to the map
     geojson = L.geoJSON(virginiaCounties, {
         style: styleFunction,
         onEachFeature: onEachFeature
     }).addTo(map);
+
+    // Bring all predicted counties to front
+    geojson.eachLayer(layer => {
+        const fips = String(layer.feature.properties.GEOID);
+        const data = predictions[fips];
+        if (data && data.occurrence) {
+            layer.bringToFront();
+        }
+    });
+    
+    populateSidebar(virginiaCounties);
+
 }).catch(err => console.error(err));
+

@@ -1,0 +1,193 @@
+:root {
+    --header-height: 60px;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Header bar */
+#header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: #1f2937;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: left;
+    padding-left: 20px;
+    font-size: 22px;
+    font-weight: bold;
+    z-index: 1000;
+}
+
+/* Sidebar */
+#sidebar {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    bottom: 0;
+    width: 300px;
+    background: #f8fafc;
+    border-right: 1px solid #ddd;
+    padding: 15px;
+    overflow-y: auto;
+}
+
+/* Sidebar title */
+#sidebar h3 {
+    margin-top: 0;
+}
+
+/* Outage list */
+#outageList {
+    list-style: none;
+    padding: 0;
+}
+
+/* Outage card */
+.outage-card {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* Sidebar card hover effect */
+.outage-card:hover {
+    background-color: #eef2ff;
+    border-color: #4f46e5;
+    cursor: pointer;
+}
+
+/* Map container */
+#map {
+    position: absolute;
+    top: 60px;
+    left: 300px;
+    right: 0;
+    bottom: 0;
+}
+
+/* ///////////////////////////////////////////////////////// */
+
+/* Sidebar table */
+#outageTable {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#outageTable th {
+    text-align: left;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #ddd;
+}
+
+#outageTable td {
+    padding: 8px 4px;
+}
+
+/* Row hover */
+.outage-row:hover {
+    background: #eef2ff;
+    cursor: pointer;
+}
+
+/* Severity badges */
+.badge {
+    padding: 4px 8px;
+    border-radius: 6px;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.badge.red {
+    background: #dc2626;
+}
+
+.badge.orange {
+    background: #f97316;
+}
+
+.badge.yellow {
+    background: #eab308;
+    color: black;
+}
+
+/* ///////////////////////////////////////////////////////// */
+
+/* GitHub icon */
+#github-link {
+    position: absolute;
+    right: 20px;
+    display: flex;
+    align-items: center;
+}
+
+/* Hover effect */
+#github-link:hover svg {
+    opacity: 0.75;
+    transform: scale(1.1);
+    transition: 0.2s ease;
+}
+
+/* ///////////////////////////////////////////////////////// */
+
+/* Loading overlay */
+
+#loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    font-size: 18px;
+}
+
+/* Spinner animation */
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 6px solid #e5e7eb;
+    border-top: 6px solid #4f46e5;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 15px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ///////////////////////////////////////////////////////// */
+
+/* Push all top-left Leaflet controls below the fixed header */
+.leaflet-top.leaflet-left,
+.leaflet-top.leaflet-right {
+    margin-top: 70px;
+    z-index: 1001;
+}
+
+.leaflet-top.leaflet-left,
+.leaflet-top.leaflet-right {
+    margin-top: calc(var(--header-height) + 10px);
+}
+
+
+/* ///////////////////////////////////////////////////////// */
+
