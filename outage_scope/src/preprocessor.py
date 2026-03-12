@@ -282,63 +282,142 @@ def create_scope_category(
 def prepare_features(
     df: pd.DataFrame,
     feature_cols: Optional[List[str]] = None,
-    target_col: str = "peak_customers_affected", # Target updated to scope
+    target_col: str = "peak_customers_affected",
 ) -> Tuple[pd.DataFrame, pd.Series]:
-    """Prepare X (features) and y (target) for outage scope modeling."""
+    """
+    Prepare X (features) and y (target) for outage scope modeling.
+
+    This version:
+      - uses only high-signal features (location, early outage dynamics, weather severity, timing)
+      - one-hot encodes event_type (and does NOT drop most rows)
+      - returns numeric-only X for XGBoost
+    """
 
     if target_col not in df.columns:
         raise ValueError(f"Target column '{target_col}' not found in DataFrame")
 
     df = df.copy()
 
+    # ----------------------------
+    # 1) Choose "important" base features
+    # ----------------------------
     if feature_cols is None:
         feature_cols = [
-            "fips_code", "year", "month", "hour", "dayofweek",
-            "county_median_scope", "county_large_outage_rate", # Updated county features
-            "initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m",
-            "has_weather_event", "max_magnitude", "magnitude_missing",
-            "prcp_mm", "snow_mm", "snwd_mm", "tmax_c", "tmin_c", 
-            "awnd_ms", "wsfg_ms", "wt_fog", "wt_thunder", "wt_ice", 
-            "wt_blowing_snow", "wt_drizzle", "wt_rain", "wt_freezing_rain", "wt_snow",
+            # location
+            "fips_code",
+            # operational timing
+            "year",
+            "month",
+            "day",
+            "hour",
+            "dayofweek",
+            # county historical patterns (strong classifier signal)
+            "county_median_scope",
+            "county_large_outage_rate",
+            # early outage dynamics
+            "initial_customers_affected",
+            "delta_customers_affected_15m",
+            "pct_growth_15m",
+            # NOAA Storm Events context (named events only, ~7% coverage)
+            "has_weather_event",
+            "max_magnitude",
+            "magnitude_missing",
+            # GHCN-Daily measured weather (~91% coverage)
+            "prcp_mm",
+            "snow_mm",
+            "snwd_mm",
+            "tmax_c",
+            "tmin_c",
+            "awnd_ms",
+            "wsfg_ms",       # peak wind gust (more predictive of severe damage than avg wind)
+            "wt_fog",
+            "wt_thunder",
+            "wt_ice",
+            "wt_blowing_snow",
+            "wt_drizzle",
+            "wt_rain",
+            "wt_freezing_rain",
+            "wt_snow",
         ]
 
+    # Keep only columns that actually exist (avoid crashing if a feature wasn't created)
     base_available = [c for c in feature_cols if c in df.columns]
+    missing = [c for c in feature_cols if c not in df.columns]
+    if missing:
+        print(f"[preprocessor] WARNING: Missing engineered features (skipping): {missing}")
 
+    # ----------------------------
+    # 2) Handle event_type -> one-hot
+    # ----------------------------
+    # If your merge produced event_type, create event_* columns here.
     if "event_type" in df.columns:
+        # Fill NaN as "None" so unmatched weather doesn't get dropped
         df["event_type"] = df["event_type"].fillna("None").astype(str)
+
+        # One-hot encode, keep all categories
         dummies = pd.get_dummies(df["event_type"], prefix="event")
+
+        # Attach to df
         df = pd.concat([df, dummies], axis=1)
 
+    # If event_* columns already exist (from earlier steps), we still include them.
     event_cols = [c for c in df.columns if c.startswith("event_")]
+
+    # ----------------------------
+    # 3) Build final feature list
+    # ----------------------------
     final_features = base_available + event_cols
+
+    # De-duplicate while preserving order
     seen = set()
     final_features = [c for c in final_features if not (c in seen or seen.add(c))]
 
+    print(f"[preprocessor] Preparing features ({len(final_features)}): {final_features}")
+
+    # ----------------------------
+    # 4) Coerce types to numeric
+    # ----------------------------
     if "fips_code" in final_features:
         df["fips_code"] = pd.to_numeric(df["fips_code"], errors="coerce")
 
+    # Make sure boolean dummy cols become 0/1 ints (sometimes pandas keeps True/False)
     for c in event_cols:
         df[c] = df[c].astype(int)
 
+    # Coerce any remaining columns to numeric where reasonable
     for c in final_features:
         if c not in df.columns:
             continue
         if df[c].dtype == "object":
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
+    # ----------------------------
+    # 5) Drop rows with NaN ONLY in core always-present features + target
+    # ----------------------------
+    # GHCN-Daily and weather event features are supplemental -- a missing
+    # value just means no nearby station reported that day, not bad data.
+    # Those NaNs get filled with 0 below. Only drop rows that are missing
+    # the features we know will always exist.
     _core = {
         "fips_code", "month", "hour", "dayofweek",
         "initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m",
     }
     subset = [c for c in base_available if c in _core] + [target_col]
+    before = len(df)
     df = df.dropna(subset=subset)
+    dropped = before - len(df)
+    if dropped > 0:
+        print(f"[preprocessor] Dropped {dropped:,} rows with NaN in {subset}")
 
     X = df[final_features].copy()
     y = df[target_col].copy()
+
+    # Final sanity: ensure numeric
     X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
 
-    return X, y
+    print(f"[preprocessor] Final dataset: {len(X):,} samples, {X.shape[1]} features")
 
+    return X, y
 
 def run_full_pipeline(
     outages_df: pd.DataFrame,

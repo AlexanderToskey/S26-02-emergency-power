@@ -148,6 +148,7 @@ def prepare_features(
             "fips_code",
             "year",
             "month",
+            "day",
             "dayofweek",
             "prcp_mm",
             "snow_mm",

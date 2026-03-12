@@ -27,9 +27,9 @@ from outage_scope.src.data_loader import (
     load_eagle_outages, load_noaa_weather, merge_weather_outages, 
     load_ghcnd_weather, merge_ghcnd_weather
 )
-from outage_scope.src.preprocessor import run_full_pipeline as run_event_pipeline
-from outage_scope.src.evaluator import evaluateModel as evaluate_event
-from outage_scope.src.evaluator import printEvaluationReport as print_event_report
+from outage_scope.src.preprocessor import run_full_pipeline as run_scope_pipeline
+from outage_scope.src.evaluator import evaluateModel as evaluate_scope
+from outage_scope.src.evaluator import printEvaluationReport as print_scope_report
 from outage_scope.src.two_stage_model import TwoStageScopeModel
 
 # --- Event (Duration) Imports ---
@@ -75,16 +75,18 @@ def main():
     #print(outages.columns)
     occurrence_labels = build_occurrence_labels(outages)
     merged_occ = merge_occurrence_with_weather(occurrence_labels, ghcnd)
+
     X_occ_full, y_occ_full = run_occ_pipeline(merged_occ)
+    
 
     # Scope and duration datasets
     print("\n--- Building Event (Scope & Duration) Datasets ---")
-    merged_event = merge_weather_outages(outages, weather)
-    merged_event = merge_ghcnd_weather(merged_event, ghcnd)
-    
+    merged_scope = merge_weather_outages(outages, weather)
+    merged_scope = merge_ghcnd_weather(merged_scope, ghcnd)
+
     # Run pipelines to get the specific target variables for Scope and Duration
-    X_scope_full, y_scope_full = run_event_pipeline(merged_event)
-    X_dur_full, y_dur_full = run_dur_pipeline(merged_event)
+    X_scope_full, y_scope_full = run_scope_pipeline(merged_scope)
+    X_dur_full, y_dur_full = run_dur_pipeline(merged_scope)
 
     # =========================================================================
     # STEP 3: TEMPORAL SPLIT (TESTING ON 2022 ONLY)
@@ -107,14 +109,23 @@ def main():
     X_dur_test = X_dur_full[dur_test_mask].copy()
     y_dur_test = y_dur_full[dur_test_mask].copy()
 
-    # Generalization: Drop future-leaking features from events
-    cols_to_drop = ['year', 'initial_customers_affected', 'delta_customers_affected_15m', 'pct_growth_15m']
-    X_scope_test = X_scope_test.drop(columns=[c for c in cols_to_drop if c in X_scope_test.columns])
-    X_dur_test = X_dur_test.drop(columns=[c for c in cols_to_drop if c in X_dur_test.columns])
-    X_occ_test = X_occ_test.drop(columns=[c for c in cols_to_drop if c in X_occ_test.columns])
+    # INCLUDE_DYNAMIC_FEATURES = False 
+    # cols_to_drop = ['year']
+    # if not INCLUDE_DYNAMIC_FEATURES:
+    #     print("[!] GENERALIZATION MODE: Removing growth features.")
+    #     cols_to_drop += ["initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m"]
+
+    # X_scope_test = X_scope_test.drop(columns=[c for c in cols_to_drop if c in X_scope_test.columns])
+    # cols_to_drop = ['year']
+    # X_dur_test = X_dur_test.drop(columns=[c for c in cols_to_drop if c in X_dur_test.columns])
+    # X_occ_test = X_occ_test.drop(columns=[c for c in cols_to_drop if c in X_occ_test.columns])
 
     print(f"  Occurrence Test Samples: {len(X_occ_test):,}")
     print(f"  Event Test Samples:      {len(X_scope_test):,}")
+
+    # Before Step 4, ensure the columns exist. 
+    # If they were dropped, you need to re-add them or stop dropping them.
+    print(X_scope_test.columns) # Run this to see what is actually there.
 
     # =========================================================================
     # STEP 4: ORACLE EVALUATION (MODELS IN A VACUUM)
@@ -125,38 +136,41 @@ def main():
 
     # --- 1. Occurrence Model Oracle ---
     print("\n--- 1. Occurrence Model (Standalone) ---")
-    preds_occ_prob = occ_model.predict(X_occ_test)[1] 
-    preds_occ_hard = (preds_occ_prob >= 0.5).astype(int)
-    occ_metrics = evaluate_occ(y_occ_test.values, preds_occ_hard, preds_occ_prob)
+    preds_occ, prob_occ = occ_model.predict(X_occ_test)
+    y_pred_occ = (prob_occ >= 0.5).astype(int)
+
+    occ_metrics = evaluate_occ(y_occ_test.values, y_pred_occ, prob_occ)
     print_occ_report(occ_metrics)
 
     # --- 2. Scope Model Oracle ---
     print("\n--- 2. Scope Model (Standalone - Perfect Gatekeeper) ---")
+    SCOPE_THRESHOLD = 500
     oracle_scope_preds = np.zeros(len(X_scope_test))
-    s_large_mask = y_scope_test >= scope_model.thresholdMin
-    s_small_mask = ~s_large_mask
+    s_large_mask = y_scope_test >= SCOPE_THRESHOLD
+    s_small_mask = y_scope_test < SCOPE_THRESHOLD
     
     if s_small_mask.sum() > 0:
-        p_log_s_small = scope_model.shortRegressor.predict(X_scope_test[s_small_mask])
+        p_log_s_small = scope_model.shortRegressor.predict(X_scope_test.loc[s_small_mask, scope_model.featureNames])
         oracle_scope_preds[s_small_mask] = np.expm1(np.clip(p_log_s_small, -20, 20))
     if s_large_mask.sum() > 0:
-        p_log_s_large = scope_model.longRegressor.predict(X_scope_test[s_large_mask])
+        p_log_s_large = scope_model.longRegressor.predict(X_scope_test.loc[s_large_mask, scope_model.featureNames])
         oracle_scope_preds[s_large_mask] = np.expm1(np.clip(p_log_s_large, -20, 20))
 
-    scope_oracle_metrics = evaluate_event(y_scope_test.values, oracle_scope_preds)
-    print_event_report(scope_oracle_metrics)
+    scope_oracle_metrics = evaluate_scope(y_scope_test.values, oracle_scope_preds)
+    print_scope_report(scope_oracle_metrics)
 
     # --- 3. Duration Model Oracle ---
     print("\n--- 3. Duration Model (Standalone - Perfect Gatekeeper) ---")
+    LONG_THRESHOLD_MIN = 240.0
     oracle_dur_preds = np.zeros(len(X_dur_test))
-    d_large_mask = y_dur_test >= dur_model.thresholdMin
-    d_small_mask = ~d_large_mask
+    d_large_mask = y_dur_test >= LONG_THRESHOLD_MIN
+    d_small_mask = y_dur_test < LONG_THRESHOLD_MIN
     
     if d_small_mask.sum() > 0:
-        p_log_d_small = dur_model.shortRegressor.predict(X_dur_test[d_small_mask])
+        p_log_d_small = dur_model.shortRegressor.predict(X_dur_test.loc[d_small_mask, dur_model.featureNames])
         oracle_dur_preds[d_small_mask] = np.expm1(np.clip(p_log_d_small, -20, 20))
     if d_large_mask.sum() > 0:
-        p_log_d_large = dur_model.longRegressor.predict(X_dur_test[d_large_mask])
+        p_log_d_large = dur_model.longRegressor.predict(X_dur_test.loc[d_large_mask, dur_model.featureNames])
         oracle_dur_preds[d_large_mask] = np.expm1(np.clip(p_log_d_large, -20, 20))
 
     dur_oracle_metrics = evaluate_dur(y_dur_test.values, oracle_dur_preds)
@@ -169,24 +183,24 @@ def main():
     print("PART B: CASCADING PIPELINE (REAL-WORLD ERROR PROPAGATION)")
     print("="*60)
     
+    #DEBUG: REMOVE =====================
+    print(f"Occurrence has 'day': {'day' in X_occ_test.columns}")
+    print(f"Scope has 'day': {'day' in X_scope_test.columns}")
+    # ==================
+
     # 5a. STAGE 1 (Occurrence) maps to STAGE 2 (Event)
-    occ_preds_df = X_occ_test[['fips_code', 'month', 'day']].copy()
-    occ_preds_df['occ_prediction'] = preds_occ_hard
+    occ_preds_df = X_occ_test[['fips_code', 'year', 'month', 'day']].copy()
+    occ_preds_df['occ_prediction'] = y_pred_occ
+
+    join_cols = ['fips_code', 'year', 'month', 'day']
 
     # Map the occurrence predictions to the scope dataset
-    if 'day' in X_scope_test.columns:
-        X_scope_mapped = X_scope_test.reset_index().merge(
-            occ_preds_df, on=['fips_code', 'month', 'day'], how='left'
-        ).set_index('index')
-        X_dur_mapped = X_dur_test.reset_index().merge(
-            occ_preds_df, on=['fips_code', 'month', 'day'], how='left'
-        ).set_index('index')
-    else:
-        print("[!] Warning: 'day' not found in features. Falling back to default cascade logic.")
-        X_scope_mapped = X_scope_test.copy()
-        X_dur_mapped = X_dur_test.copy()
-        X_scope_mapped['occ_prediction'] = 1
-        X_dur_mapped['occ_prediction'] = 1
+    X_scope_mapped = X_scope_test.reset_index().merge(
+        occ_preds_df, on=join_cols, how='left'
+    ).set_index('index')
+    X_dur_mapped = X_dur_test.reset_index().merge(
+        occ_preds_df, on=join_cols, how='left'
+    ).set_index('index')
 
     pipeline_event_mask = X_scope_mapped['occ_prediction'] == 1
     missed_events = (~pipeline_event_mask).sum()
@@ -197,18 +211,23 @@ def main():
     pipeline_dur_preds = np.zeros(len(X_dur_test))
 
     # 5b. STAGE 2 & 3 (Gatekeepers & Specialists)
-    if pipeline_event_mask.sum() > 0:
-        X_predicted_scope = X_scope_test[pipeline_event_mask]
-        X_predicted_dur = X_dur_test[pipeline_event_mask]
-        
-        print(f"  -> Routing {pipeline_event_mask.sum():,} predicted outages through Gatekeepers...")
-        pipeline_scope_preds[pipeline_event_mask] = scope_model.predict(X_predicted_scope)
-        pipeline_dur_preds[pipeline_event_mask] = dur_model.predict(X_predicted_dur)
+    # --- SCOPE PREDICTION ---
+    scope_mask = (X_scope_mapped['occ_prediction'] == 1).values
+    if scope_mask.sum() > 0:
+        X_input_scope = X_scope_mapped.loc[scope_mask, scope_model.featureNames]
+        pipeline_scope_preds[scope_mask] = scope_model.predict(X_input_scope)
+
+    # --- DURATION PREDICTION ---
+    # We create a NEW mask specifically for the Duration dataframe's length
+    dur_mask = (X_dur_mapped['occ_prediction'] == 1).values
+    if dur_mask.sum() > 0:
+        X_input_dur = X_dur_mapped.loc[dur_mask, dur_model.featureNames]
+        pipeline_dur_preds[dur_mask] = dur_model.predict(X_input_dur)
 
     # 5c. Final Pipeline Evaluation
     print("\n--- End-to-End Cascaded Pipeline Evaluation (SCOPE) ---")
-    final_scope_metrics = evaluate_event(y_scope_test.values, pipeline_scope_preds)
-    print_event_report(final_scope_metrics)
+    final_scope_metrics = evaluate_scope(y_scope_test.values, pipeline_scope_preds)
+    print_scope_report(final_scope_metrics)
 
     print("\n--- End-to-End Cascaded Pipeline Evaluation (DURATION) ---")
     final_dur_metrics = evaluate_dur(y_dur_test.values, pipeline_dur_preds)

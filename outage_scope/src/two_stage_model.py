@@ -306,7 +306,7 @@ class TwoStageScopeModel:
         print(f"two-stage model saved to {path}")
 
     @classmethod
-    def load(cls, path: str) -> 'TwoStageOutageModel':
+    def load(cls, path: str) -> 'TwoStageScopeModel':
         data = joblib.load(path)
         instance = cls(thresholdMin=data['thresholdMin'])
         instance.classifier = data['classifier']

@@ -362,6 +362,7 @@ def prepare_features(
             # operational timing
             "year",
             "month",
+            "day",
             "hour",
             "dayofweek",
             # county historical patterns (strong classifier signal)
