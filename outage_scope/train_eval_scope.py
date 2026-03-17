@@ -41,7 +41,7 @@ def main():
     train_mask = X_full['year'] < TEST_YEAR
     test_mask = X_full['year'] == TEST_YEAR
 
-    INCLUDE_DYNAMIC_FEATURES = False 
+    INCLUDE_DYNAMIC_FEATURES = False
     cols_to_drop = ['year']
     if not INCLUDE_DYNAMIC_FEATURES:
         print("[!] GENERALIZATION MODE: Removing growth features.")
