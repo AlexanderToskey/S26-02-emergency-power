@@ -1,123 +1,71 @@
+import requests
 import pandas as pd
-import numpy as np
-import openmeteo_requests
-import requests_cache
-from retry_requests import retry
+from time import sleep
 
-# Load geo data
-geo_df = pd.read_csv("virginia_geo.csv")
+# =========================
+# INSERT YOUR API KEY HERE
+# =========================
+GOOGLE_API_KEY = "YOUR_API_KEY_HERE"
 
-# Drop missing coords
-geo_df = geo_df.dropna(subset=["latitude", "longitude"]).reset_index(drop=True)
+# Census API endpoint for counties in Virginia (state FIPS = 51)
+url = "https://api.census.gov/data/2020/dec/pl?get=NAME&for=county:*&in=state:51"
 
-# Setup API client
-cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
-retry_session = retry(cache_session, retries=3, backoff_factor=0.2)
-client = openmeteo_requests.Client(session=retry_session)
+response = requests.get(url)
+data = response.json()
 
-url = "https://api.open-meteo.com/v1/forecast"
+# Convert to DataFrame
+df = pd.DataFrame(data[1:], columns=data[0])
 
-# Prepare batched coordinates
-latitudes = geo_df["latitude"].tolist()
-longitudes = geo_df["longitude"].tolist()
+# Rename columns
+df.rename(columns={
+    "NAME": "county_name",
+    "state": "state_fips",
+    "county": "county_fips"
+}, inplace=True)
 
-params = {
-    "latitude": latitudes,
-    "longitude": longitudes,
-    "hourly": [
-        "temperature_2m",
-        "precipitation",
-        "snowfall",
-        "windspeed_10m",
-        "weathercode"
-    ],
-    "daily": [
-        "temperature_2m_max",
-        "temperature_2m_min"
-    ],
-    "forecast_days": 1,
-    "timezone": "America/New_York"
-}
+# Create full FIPS (state + county)
+df["fips"] = df["state_fips"] + df["county_fips"]
 
-def map_weather_flags(code):
-    return {
-        "wt_fog": int(code in [45, 48]),
-        "wt_thunder": int(code in [95, 96, 99]),
-        "wt_snow": int(code in [71, 73, 75, 77, 85, 86]),
-        "wt_freezing_rain": int(code in [66, 67]),
-        "wt_ice": int(code in [66, 67]),
-        "wt_blowing_snow": int(code in [77])
-    }
 
-rows = []
-
-# Make ONE API call
-responses = client.weather_api(url, params=params)
-
-# Loop through each county response
-for idx, r in enumerate(responses):
-    fips = geo_df.loc[idx, "fips"]
-
+# Function to get lat/lon using Google Places API
+def get_lat_lon(county_name):
     try:
-        # --- HOURLY ---
-        hourly = r.Hourly()
+        query = f"{county_name}, Virginia, USA"
+        endpoint = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
 
-        temp = hourly.Variables(0).ValuesAsNumpy()
-        prcp = hourly.Variables(1).ValuesAsNumpy()
-        snow = hourly.Variables(2).ValuesAsNumpy()
-        wind = hourly.Variables(3).ValuesAsNumpy()
-        codes = hourly.Variables(4).ValuesAsNumpy()
+        params = {
+            "input": query,
+            "inputtype": "textquery",
+            "fields": "geometry",
+            "key": GOOGLE_API_KEY
+        }
 
-        start = hourly.Time()
-        interval = hourly.Interval()
-        n = len(temp)
+        response = requests.get(endpoint, params=params)
+        result = response.json()
 
-        times = [start + i * interval for i in range(n)]
-
-        # --- DAILY ---
-        daily = r.Daily()
-        tmax = daily.Variables(0).ValuesAsNumpy()[0]
-        tmin = daily.Variables(1).ValuesAsNumpy()[0]
-
-        # --- BUILD ROWS ---
-        for i in range(n):
-            dt = pd.to_datetime(times[i], unit="s")
-            flags = map_weather_flags(codes[i])
-
-            rows.append({
-                "fips_code": fips,
-                "year": dt.year,
-                "month": dt.month,
-                "day": dt.day,
-                "hour": dt.hour,
-                "dayofweek": dt.dayofweek,
-
-                # Weather
-                "prcp_mm": prcp[i],
-                "snow_mm": snow[i],
-                "tmax_c": tmax,
-                "tmin_c": tmin,
-                "awnd_ms": wind[i],
-
-                # Flags
-                "wt_fog": flags["wt_fog"],
-                "wt_thunder": flags["wt_thunder"],
-                "wt_snow": flags["wt_snow"],
-                "wt_freezing_rain": flags["wt_freezing_rain"],
-                "wt_ice": flags["wt_ice"],
-                "wt_blowing_snow": flags["wt_blowing_snow"],
-
-                # Derived
-                "has_weather_event": int(codes[i] >= 95),
-                "max_magnitude": max(prcp[i], wind[i]),
-                "magnitude_missing": 0
-            })
-
+        if result.get("candidates"):
+            location = result["candidates"][0]["geometry"]["location"]
+            return location["lat"], location["lng"]
     except Exception as e:
-        print(f"Error for FIPS {fips}: {e}")
+        print(f"Error for {county_name}: {e}")
 
-# Save output
-df = pd.DataFrame(rows)
-df.to_csv("virginia_county_weather.csv", index=False)
+    return None, None
 
-print("Batch CSV 'virginia_county_weather.csv' created successfully.")
+
+# Get coordinates
+latitudes = []
+longitudes = []
+
+for county in df["county_name"]:
+    lat, lon = get_lat_lon(county)
+    latitudes.append(lat)
+    longitudes.append(lon)
+    sleep(0.2)  # Google allows faster requests than Nominatim
+
+df["latitude"] = latitudes
+df["longitude"] = longitudes
+
+# Save to CSV
+df.to_csv("virginia_geo.csv", index=False)
+
+print("CSV file 'virginia_geo.csv' created successfully.")
