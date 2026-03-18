@@ -5,7 +5,7 @@ from time import sleep
 # =========================
 # INSERT YOUR API KEY HERE
 # =========================
-GOOGLE_API_KEY = "AIzaSyCouH3gJ3MIOGQr2Pwx9WioL5xw5Pd8fIc"
+GOOGLE_API_KEY = ""
 
 # Census API endpoint for counties in Virginia (state FIPS = 51)
 url = "https://api.census.gov/data/2020/dec/pl?get=NAME&for=county:*&in=state:51"
