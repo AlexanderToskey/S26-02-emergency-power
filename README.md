@@ -26,3 +26,5 @@ http://127.0.0.1:5000/
 ```
 
 You should see the Virginia county map. Hover over a county to see the predicted outage information.
+
+Click on a county to see the feature importance for the prediction.
