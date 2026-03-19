@@ -1,15 +1,55 @@
 from flask import Flask, render_template, jsonify
 import json
 import os
+import threading
+import time
+
+import realtime_inference
 
 app = Flask(__name__)
 
-# Serve the main map page
+# ── Startup: load models and run first inference ───────────────────────────────
+
+def _background_refresh(interval_seconds: int = 900):
+    """
+    Background thread: re-runs the full inference pipeline every `interval_seconds`
+    (default 15 minutes) so predictions stay current without blocking API requests.
+    """
+    while True:
+        try:
+            realtime_inference.run_inference()
+        except Exception as e:
+            print(f"[app] Background inference error: {e}")
+        time.sleep(interval_seconds)
+
+
+def _startup():
+    """Load models, run an initial inference, then launch the refresh thread."""
+    ok = realtime_inference.init()
+    if not ok:
+        print("[app] WARNING: Some components failed to load. "
+              "Predictions may be degraded or unavailable.")
+
+    # First inference run (blocking, so the first API call is never empty)
+    print("[app] Running initial inference ...")
+    try:
+        realtime_inference.run_inference()
+    except Exception as e:
+        print(f"[app] Initial inference failed: {e}")
+
+    # Background refresh thread (daemon=True so it dies with the server)
+    t = threading.Thread(target=_background_refresh, daemon=True)
+    t.start()
+    print("[app] Background refresh thread started (interval: 15 min).")
+
+
+# ── Routes ─────────────────────────────────────────────────────────────────────
+
 @app.route("/")
 def index():
     return render_template("index.html")
 
-# Serve the counties GeoJSON
+
 @app.route("/api/counties")
 def counties():
     filepath = os.path.join(os.path.dirname(__file__), "static", "counties.json")
@@ -17,33 +57,37 @@ def counties():
         data = json.load(f)
     return jsonify(data)
 
-# Serve example outage predictions
+
 @app.route("/api/predictions")
 def predictions():
-    # TODO: Replace with model outputs and real-time integration
-    # Example: counties with True have a prediction and counties with False don't
-    data = {
-        "51107": { "occurrence": True, "scope": 5600, "duration": 4.5 },
-        "51121": { "occurrence": True, "scope": 1200, "duration": 1.5 },
-
-        "51013": { "occurrence": True,  "scope": 7342, "duration": 12.7 },
-        "51041": { "occurrence": True,  "scope": 1985, "duration": 37.4 },
-        "51047": { "occurrence": True,  "scope": 8421, "duration": 5.2 },
-        "51059": { "occurrence": True,  "scope": 6523, "duration": 16.8 },
-        "51061": { "occurrence": True,  "scope": 412,  "duration": 2.6 },
-        "51069": { "occurrence": True,  "scope": 9055, "duration": 54.3 },
-        "51087": { "occurrence": True,  "scope": 7210, "duration": 23.1 },
-        "51099": { "occurrence": True,  "scope": 3567, "duration": 8.9 },
-        "51153": { "occurrence": True,  "scope": 918,  "duration": 3.7 },
-        "51157": { "occurrence": True,  "scope": 6475, "duration": 42.5 },
-        "51177": { "occurrence": True,  "scope": 2740, "duration": 9.4 },
-        "51179": { "occurrence": True,  "scope": 7833, "duration": 65.2 },
-        "51187": { "occurrence": False,  "scope": 0, "duration": 0 },
-        "51199": { "occurrence": False,  "scope": 0, "duration": 0 },
-        "51710": { "occurrence": False,  "scope": 0, "duration": 0 },
-        "51810": { "occurrence": False,  "scope": 0, "duration": 0 },
-    }
+    """
+    Returns live county-level outage predictions.
+    Each key is a 5-digit FIPS code; each value contains:
+        occurrence  bool    whether an outage is predicted
+        scope       float   predicted customers affected (0 if occurrence=False)
+        duration    float   predicted duration in hours  (0 if occurrence=False)
+        occ_prob    float   raw occurrence probability (0–1)
+    """
+    data = realtime_inference.get_cached_predictions()
+    if not data:
+        return jsonify({"error": "Predictions not yet available. Try again shortly."}), 503
     return jsonify(data)
 
+
+@app.route("/api/status")
+def status():
+    """Returns model load status and last inference timestamp."""
+    return jsonify({
+        "models_loaded": realtime_inference._occ_model is not None,
+        "last_updated":  realtime_inference.get_last_updated(),
+        "counties_in_cache": len(realtime_inference.get_cached_predictions()),
+    })
+
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    _startup()
+    # use_reloader=False prevents the startup logic from running twice
+    # in Flask's debug reloader subprocess
+    app.run(debug=True, use_reloader=False)
