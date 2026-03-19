@@ -121,22 +121,6 @@ def _test_kubra(cfg: dict):
             )
         else:
             _ok(f"response keys: {list(records.keys())[:8]}")
-
-        total = 0
-        for i, record in enumerate(records):
-            name = record.get("title", "Unknown")
-            desc = record.get("desc", {})
-            
-            # Extract metrics
-            cust_a = desc.get("cust_a", {}).get("val", 0) if isinstance(desc.get("cust_a"), dict) else 0
-            cust_s = desc.get("cust_s", 0)
-            n_out  = desc.get("n_out", 0)
-
-            total += cust_a
-            
-            print(f"  {name:<25} | {n_out:<8} | {cust_a:<10} | {cust_s}")
-
-        print('total_outage: ', total)
     except (urllib.error.URLError, Exception) as e:
         _fail("thematic county data", e)
 
