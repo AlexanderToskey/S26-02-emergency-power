@@ -548,6 +548,60 @@ def run_inference() -> Dict[str, Any]:
             event_df["initial_customers_affected"] / max_cust
         ).clip(upper=1.0)
 
+        # Synthesize event_* columns from weather data.
+        # These map to the NOAA storm event types the models were trained on.
+        def _event_flags(row) -> dict:
+            prcp  = row.get("prcp_mm",  0.0)
+            snow  = row.get("snow_mm",  0.0)
+            snwd  = row.get("snwd_mm",  0.0)
+            wind  = row.get("awnd_ms",  0.0)
+            gust  = row.get("wsfg_ms",  0.0)
+            tmin  = row.get("tmin_c",   0.0)
+            fog   = row.get("wt_fog",   0)
+            thunder = row.get("wt_thunder", 0)
+            ice   = row.get("wt_ice",   0)
+            frzrn = row.get("wt_freezing_rain", 0)
+            bsnow = row.get("wt_blowing_snow",  0)
+            wsnow = row.get("wt_snow",  0)
+
+            flags = {
+                "event_Thunderstorm Wind": int(thunder and gust > 13),
+                "event_Lightning":         int(thunder),
+                "event_Hail":              int(thunder and gust > 18),
+                "event_High Wind":         int(gust > 25),
+                "event_Strong Wind":       int(wind > 13 and gust <= 25),
+                "event_Dense Fog":         int(fog),
+                "event_Heavy Rain":        int(prcp > 25),
+                "event_Flash Flood":       int(prcp > 50),
+                "event_Flood":             int(prcp > 30),
+                "event_Heavy Snow":        int(wsnow and snow > 100),
+                "event_Blizzard":          int(bsnow and wind > 15),
+                "event_Winter Storm":      int((snow > 50 or snwd > 50) and tmin < 0),
+                "event_Winter Weather":    int(wsnow and snow <= 100),
+                "event_Ice Storm":         int(ice or frzrn),
+                "event_Frost/Freeze":      int(tmin < 0 and prcp == 0),
+                # remaining event types have no reliable real-time proxy → 0
+                "event_Avalanche":         0,
+                "event_Coastal Flood":     0,
+                "event_Cold/Wind Chill":   int(tmin < -10),
+                "event_Debris Flow":       0,
+                "event_Drought":           0,
+                "event_Excessive Heat":    int(row.get("tmax_c", 0) > 38),
+                "event_Extreme Cold/Wind Chill": int(tmin < -20),
+                "event_Funnel Cloud":      0,
+                "event_Heat":              int(row.get("tmax_c", 0) > 32),
+                "event_Rip Current":       0,
+                "event_Tornado":           0,
+                "event_Tropical Storm":    int(gust > 33 and prcp > 25),
+                "event_Wildfire":          0,
+            }
+            any_event = any(flags.values())
+            flags["event_None"] = int(not any_event)
+            return flags
+
+        event_flags_df = event_df.apply(_event_flags, axis=1, result_type="expand")
+        event_df = pd.concat([event_df, event_flags_df], axis=1)
+
         # Convert fips to numeric for XGBoost
         event_df["fips_code"] = pd.to_numeric(event_df["fips_code"], errors="coerce")
         event_df = event_df.apply(pd.to_numeric, errors="coerce").fillna(0)
