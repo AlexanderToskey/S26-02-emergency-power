@@ -94,27 +94,53 @@ function showInfoPanel(name, data) {
     }, 300);
 }
 
-// Populate sidebar
+// Populate the left panel with outage predictions
 function populateSidebar(countiesData) {
 
     const list = document.getElementById("outageList");
     list.innerHTML = "";
 
-    countiesData.features.forEach(feature => {
-
+    // Build array with all counties
+    const allCounties = countiesData.features.map(feature => {
         const fips = String(feature.properties.GEOID);
         const name = feature.properties.NAME;
         const data = predictions[fips];
 
-        if (data && data.occurrence) {
+        return {
+            fips,
+            name,
+            data,
+            hasOutage: data && data.occurrence
+        };
+    });
 
-            const row = document.createElement("tr");
-            row.className = "outage-row";
+    // Sort → outages first, then alphabetical
+    allCounties.sort((a, b) => {
 
-            // Determine severity
-            let severity = "yellow";
-            let label = "Minor";
+        // Outages first
+        if (a.hasOutage && !b.hasOutage) return -1;
+        if (!a.hasOutage && b.hasOutage) return 1;
 
+        // Alphabetical within groups
+        return a.name.localeCompare(b.name);
+    });
+
+    // Render all counties
+    allCounties.forEach(({ fips, name, data, hasOutage }) => {
+
+        const row = document.createElement("tr");
+        row.className = "outage-row";
+
+        // If no outage is predicted, gray it out
+        if (!hasOutage) {
+            row.classList.add("no-outage");
+        }
+
+        // Determine severity (only for outages)
+        let severity = "yellow";
+        let label = "Minor";
+
+        if (hasOutage) {
             if (data.scope > 5000) {
                 severity = "red";
                 label = "Severe";
@@ -123,75 +149,76 @@ function populateSidebar(countiesData) {
                 severity = "orange";
                 label = "Moderate";
             }
-
-            row.innerHTML = `
-                <td>${name} County</td>
-                <td><span class="badge ${severity}">${label}</span></td>
-            `;
-
-            // Helper to find county layer
-            function getLayer() {
-                let found = null;
-                geojson.eachLayer(layer => {
-                    if (layer.feature.properties.GEOID === fips) {
-                        found = layer;
-                    }
-                });
-                return found;
-            }
-
-            // Hover highlight
-            row.addEventListener("mouseenter", () => {
-                const layer = getLayer();
-                if (layer) {
-                    layer.setStyle({
-                        weight: 4,
-                        color: "blue"
-                    });
-                }
-            });
-
-            row.addEventListener("mouseleave", () => {
-                const layer = getLayer();
-                if (layer) {
-                    geojson.resetStyle(layer);
-                }
-            });
-
-            // Click zoom
-            row.addEventListener("click", () => {
-
-                const layer = getLayer();
-
-                if (layer) {
-
-                    map.fitBounds(layer.getBounds(), { padding:[200,200]});
-
-                    layer.setStyle({
-                        weight: 4,
-                        color: "blue"
-                    });
-
-                    const tooltipContent = `
-                        <b>${name} County</b><br/>
-                        Outage Predicted<br/>
-                        Projected # of Affected Customers: ${data.scope}<br/>
-                        Projected Outage Duration: ${data.duration} hrs
-                    `;
-
-                    layer.bindTooltip(tooltipContent).openTooltip();
-
-                    // Display the explanation panel
-                    showInfoPanel(name, data);
-
-                    setTimeout(() => {
-                        geojson.resetStyle(layer);
-                    }, 3000);
-                }
-            });
-
-            list.appendChild(row);
         }
+
+        row.innerHTML = `
+            <td>${name} County</td>
+            <td>
+                ${hasOutage 
+                    ? `<span class="badge ${severity}">${label}</span>`
+                    : `<span class="no-outage-text">None</span>`
+                }
+            </td>
+        `;
+
+        // Helper to find county layer
+        function getLayer() {
+            let found = null;
+            geojson.eachLayer(layer => {
+                if (layer.feature.properties.GEOID === fips) {
+                    found = layer;
+                }
+            });
+            return found;
+        }
+
+        // Hover highlight only if there's an outage)
+        row.addEventListener("mouseenter", () => {
+            //if (!hasOutage) return;
+
+            const layer = getLayer();
+            if (layer) {
+                layer.setStyle({
+                    weight: 4,
+                    color: "blue"
+                });
+            }
+        });
+
+        row.addEventListener("mouseleave", () => {
+            //if (!hasOutage) return;
+
+            const layer = getLayer();
+            if (layer) {
+                geojson.resetStyle(layer);
+            }
+        });
+
+        // Click behavior
+        row.addEventListener("click", () => {
+
+            const layer = getLayer();
+
+            if (layer) {
+
+                map.fitBounds(layer.getBounds(), { padding:[200,200] });
+
+                if (hasOutage) {
+                    layer.setStyle({
+                        weight: 4,
+                        color: "blue"
+                    });
+                }
+
+                showInfoPanel(name, data);
+
+                setTimeout(() => {
+                    geojson.resetStyle(layer);
+                }, 3000);
+            }
+        });
+
+        list.appendChild(row);
     });
 }
 
