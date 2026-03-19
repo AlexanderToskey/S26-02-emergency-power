@@ -109,16 +109,7 @@ def main():
     X_dur_test = X_dur_full[dur_test_mask].copy()
     y_dur_test = y_dur_full[dur_test_mask].copy()
 
-    # INCLUDE_DYNAMIC_FEATURES = False 
-    # cols_to_drop = ['year']
-    # if not INCLUDE_DYNAMIC_FEATURES:
-    #     print("[!] GENERALIZATION MODE: Removing growth features.")
-    #     cols_to_drop += ["initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m"]
-
-    # X_scope_test = X_scope_test.drop(columns=[c for c in cols_to_drop if c in X_scope_test.columns])
-    # cols_to_drop = ['year']
-    # X_dur_test = X_dur_test.drop(columns=[c for c in cols_to_drop if c in X_dur_test.columns])
-    # X_occ_test = X_occ_test.drop(columns=[c for c in cols_to_drop if c in X_occ_test.columns])
+    print(scope_model.featureNames)
 
     print(f"  Occurrence Test Samples: {len(X_occ_test):,}")
     print(f"  Event Test Samples:      {len(X_scope_test):,}")
