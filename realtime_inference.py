@@ -16,6 +16,7 @@ import json
 import threading
 import urllib.request
 import urllib.error
+import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -125,36 +126,38 @@ def init() -> bool:
             "county_median_scope", "county_large_outage_rate", "county_max_customers",
         ])
 
+    init_fips_cache(GEO_FILE)
+
     return ok
 
 
 # ── Haversine distance ─────────────────────────────────────────────────────────
 
-def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Return great-circle distance in km between two lat/lon points."""
-    R = 6371.0
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (
-        math.sin(dlat / 2) ** 2
-        + math.cos(math.radians(lat1))
-        * math.cos(math.radians(lat2))
-        * math.sin(dlon / 2) ** 2
-    )
-    return R * 2 * math.asin(math.sqrt(a))
+# def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+#     """Return great-circle distance in km between two lat/lon points."""
+#     R = 6371.0
+#     dlat = math.radians(lat2 - lat1)
+#     dlon = math.radians(lon2 - lon1)
+#     a = (
+#         math.sin(dlat / 2) ** 2
+#         + math.cos(math.radians(lat1))
+#         * math.cos(math.radians(lat2))
+#         * math.sin(dlon / 2) ** 2
+#     )
+#     return R * 2 * math.asin(math.sqrt(a))
 
 
-def _nearest_fips(lat: float, lon: float) -> Optional[str]:
-    """Return the FIPS code of the nearest Virginia county centroid."""
-    if _geo is None:
-        return None
-    best_fips, best_dist = None, float("inf")
-    for _, row in _geo.iterrows():
-        d = _haversine(lat, lon, row["latitude"], row["longitude"])
-        if d < best_dist:
-            best_dist = d
-            best_fips = row["fips"]
-    return best_fips
+# def _nearest_fips(lat: float, lon: float) -> Optional[str]:
+#     """Return the FIPS code of the nearest Virginia county centroid."""
+#     if _geo is None:
+#         return None
+#     best_fips, best_dist = None, float("inf")
+#     for _, row in _geo.iterrows():
+#         d = _haversine(lat, lon, row["latitude"], row["longitude"])
+#         if d < best_dist:
+#             best_dist = d
+#             best_fips = row["fips"]
+#     return best_fips
 
 
 # ── Open-Meteo weather fetching ────────────────────────────────────────────────
@@ -286,10 +289,75 @@ def _fetch_weather_all_counties(now: datetime) -> pd.DataFrame:
 
     return pd.DataFrame(rows)
 
+# ── Kubra instance IDs ────────────────────────────────────────────────────────
+
+_KUBRA_BASE = "https://kubra.io"
+
+_DOMINION = {
+    "name": "Dominion Energy",
+    "instance": "9c691bb6-767e-4532-b00e-286ac9adc223",
+    "view":     "38b5394c-8bca-4dfd-ac59-b321615446bd",
+    "thematic": "thematic-1",
+}
+
+_APPALACHIAN = {
+    "name": "Appalachian Power",
+    "instance": "6674f49e-0236-4ed8-a40a-b31747557ab7",
+    "view":     "8cfe790f-59f3-4ce3-a73f-a9642227411f",
+    "thematic": "thematic-2",
+}
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _get(url: str, timeout: int = 15) -> dict:
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read())
+
+
+def _ok(label: str):
+    print(f"  [OK] {label}")
+
+
+def _fail(label: str, e: Exception):
+    print(f"  [FAIL] {label}: {e}")
+
+_FIPS_CACHE = {}
+
+def init_fips_cache(file_path: Path):
+    global _FIPS_CACHE
+    try:
+        df = pd.read_csv(file_path, dtype={"county_name": str, "fips": str})
+        if df.empty:
+            raise ValueError(f"File {file_path.name} is empty.")
+        
+        for _, row in df.iterrows():
+            fips = str(row["fips"])
+            raw_name = row["county_name"].lower().replace(", virginia","").strip()
+
+            aliases = []
+
+            aliases.append(raw_name)
+            # aliases.append(raw_name.replace(", virginia","").strip())
+            aliases.append(raw_name.replace(" county","").replace(" city","").strip())
+
+            for a in aliases:
+                if a not in _FIPS_CACHE or "county" in raw_name:
+                    _FIPS_CACHE[a] = fips
+
+        _ok(f"Successfully initialized FIPS Cache with {len(_FIPS_CACHE)} keys.")
+
+    except Exception as e:
+        print(f"[ERROR] Failed to load {file_path.name}: {e}")
+        raise
+
+def _name_to_fips(name: str) -> str:
+
+    return _FIPS_CACHE.get(name.lower(), "")
 
 # ── Kubra / Dominion outage fetching ──────────────────────────────────────────
 
-def _fetch_kubra_by_fips() -> Dict[str, float]:
+def _fetch_kubra_by_fips(cfg: dict) -> Dict[str, float]:
     """
     Fetch live Dominion outage data via Kubra StormCenter quadkey tiles,
     map each outage point to its nearest Virginia county FIPS code, and
@@ -300,55 +368,48 @@ def _fetch_kubra_by_fips() -> Dict[str, float]:
         Empty dict if Kubra is unreachable or scraping fails.
     """
     try:
-        import requests
-        import itertools
 
-        # Step 1: get the current data interval path
         state_url = (
-            f"https://kubra.io/stormcenter/api/v1/stormcenters/{_STORMCENTER_ID}"
-            f"/views/{_VIEW_ID}/currentState?preview=false"
-        )
-        state_data = requests.get(state_url, timeout=10).json()
-        interval_path = state_data["data"]["interval_generation_data"]
-        interval_id   = interval_path.split("/")[-1]
-
-        # Step 2: scan Virginia quadkey tiles
-        prefixes = ["0320"]
-        suffixes = ["".join(p) for p in itertools.product("0123", repeat=4)]
-        quadkeys = [p + s for p in prefixes for s in suffixes]
-
-        fips_counts: Dict[str, float] = {}
-
-        for qk in quadkeys:
-            qkh = qk[-3:][::-1]
-            url = (
-                f"https://kubra.io/cluster-data/{qkh}"
-                f"/072d01db-d26d-446b-83be-81f4fb94201c"
-                f"/{interval_id}/public/cluster-1/{qk}.json"
+                f"{_KUBRA_BASE}/stormcenter/api/v1/stormcenters"
+                f"/{cfg['instance']}/views/{cfg['view']}/currentState?preview=false"
             )
-            resp = requests.get(url, timeout=5)
-            if resp.status_code != 200:
+        try:
+            state = _get(state_url)
+            data_path = state["data"]["interval_generation_data"]
+            _ok(f"currentState  data_path={data_path}")
+        except (urllib.error.URLError, KeyError, Exception) as e:
+            _fail("currentState", e)
+            return {}
+
+        # Step 2: fetch county-level outage thematic layer
+        thematic_url = f"{_KUBRA_BASE}/{data_path}/public/{cfg['thematic']}/thematic_areas.json"
+
+        counties = _get(thematic_url)
+        records = counties.get("file_data", counties)
+
+        fips_counts : Dict[str,float]= {}
+        for record in records:
+            name = record.get("title", "")
+            desc = record.get("desc", {})
+            cust_a = desc.get("cust_a", {})
+            if isinstance(cust_a, dict):
+                cust_a = float(cust_a.get("val", 0))
+            else:
+                cust_a = 0.0
+            
+            if cust_a <= 0:
                 continue
 
-            for item in resp.json().get("file_data", []):
-                cust = item["desc"]["cust_a"]["val"]
-                if cust <= 0:
-                    continue
-                try:
-                    import polyline as polyline_lib
-                    geom   = item["geom"]["p"][0]
-                    coords = polyline_lib.decode(geom)[0]
-                    lat, lon = coords[0], coords[1]
-                except Exception:
-                    continue
-
-                fips = _nearest_fips(lat, lon)
-                if fips:
-                    fips_counts[fips] = fips_counts.get(fips, 0.0) + cust
+            fips = _name_to_fips(name)
+            if fips.isdigit():
+                fips_counts[fips] = cust_a + fips_counts.get(fips, 0.0)
+            else:
+                print(f"[realtime] Unknown region name: {name}")
 
         total = sum(fips_counts.values())
         print(f"[realtime] Kubra: {len(fips_counts)} counties affected, "
-              f"{int(total):,} customers total.")
+              f"{int(total):,} customers total.")        
+
         return fips_counts
 
     except ImportError:
@@ -409,8 +470,16 @@ def run_inference() -> Dict[str, Any]:
     weather_df = weather_df.reset_index(drop=True)
 
     # ── Step 2: Kubra outages ──────────────────────────────────────────────────
+
     print("[realtime] Fetching Kubra outage data ...")
-    current_kubra: Dict[str, float] = _fetch_kubra_by_fips()
+
+    current_kubra: Dict[str, float] = _fetch_kubra_by_fips(_DOMINION)
+
+    app_kubra: Dict[str, float] = _fetch_kubra_by_fips(_APPALACHIAN)
+
+    for fips, cust_a in app_kubra.items():
+        current_kubra[fips] = current_kubra.get(fips, 0.0) + cust_a
+
 
     # Compute delta vs previous poll (for scope/duration models)
     delta_kubra:   Dict[str, float] = {}
@@ -464,13 +533,13 @@ def run_inference() -> Dict[str, Any]:
 
         # Attach live Kubra features
         event_df["initial_customers_affected"] = (
-            event_df["fips_code"].map(lambda f: current_kubra.get(f, 0.0))
+            event_df["fips_code"].map(lambda f: current_kubra.get(str(int(f)), 0.0))
         )
         event_df["delta_customers_affected_15m"] = (
-            event_df["fips_code"].map(lambda f: delta_kubra.get(f, 0.0))
+            event_df["fips_code"].map(lambda f: delta_kubra.get(str(int(f)), 0.0))
         )
         event_df["pct_growth_15m"] = (
-            event_df["fips_code"].map(lambda f: pct_growth.get(f, 0.0))
+            event_df["fips_code"].map(lambda f: pct_growth.get(str(int(f)), 0.0))
         )
 
         # initial_impact_density: fraction of max county customers currently out
