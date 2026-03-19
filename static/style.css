@@ -225,3 +225,21 @@ body {
 
 /* ///////////////////////////////////////////////////////// */
 
+/* Gray out rows with no outages */
+.no-outage {
+    opacity: 0.5;
+}
+
+/* Optional: make text explicitly gray */
+.no-outage td {
+    color: #6b7280;
+}
+
+/* Style for "None" label */
+.no-outage-text {
+    font-style: italic;
+    color: #9ca3af;
+}
+
+/* ///////////////////////////////////////////////////////// */
+
