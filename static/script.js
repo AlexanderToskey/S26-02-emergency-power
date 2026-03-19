@@ -55,10 +55,44 @@ function onEachFeature(feature, layer) {
         mouseout: function () {
             layer.closeTooltip();
             geojson.resetStyle(layer);
+        },
+
+        click: function () {
+            showInfoPanel(name, data);
         }
     });
 }
 
+// Displays the SHAP feature importance on the left side of the screen
+function showInfoPanel(name, data) {
+    const panel = document.getElementById("infoPanel");
+    const mapDiv = document.getElementById("map");
+    const title = document.getElementById("countyName");
+    const details = document.getElementById("countyDetails");
+
+    title.textContent = `${name} County`;
+
+    if (data && data.occurrence) {
+        details.innerHTML = `
+            <b>Scope:</b> ${data.scope}<br/>
+            <b>Duration:</b> ${data.duration} hrs<br/><br/>
+            include feature justification here<br/><br/>
+
+        `;
+    } else {
+        details.innerHTML = `
+            No outage predicted.<br/><br/>
+            include feature justification here<br/><br/>
+        `;
+    }
+
+    panel.classList.remove("hidden");
+    panel.classList.add("visible");
+
+    setTimeout(() => {
+        map.invalidateSize();
+    }, 300);
+}
 
 // Populate sidebar
 function populateSidebar(countiesData) {
@@ -147,6 +181,9 @@ function populateSidebar(countiesData) {
 
                     layer.bindTooltip(tooltipContent).openTooltip();
 
+                    // Display the explanation panel
+                    showInfoPanel(name, data);
+
                     setTimeout(() => {
                         geojson.resetStyle(layer);
                     }, 3000);
@@ -191,3 +228,13 @@ Promise.all([
 
 }).catch(err => console.error(err));
 
+document.getElementById("closePanel").addEventListener("click", () => {
+    const panel = document.getElementById("infoPanel");
+    const mapDiv = document.getElementById("map");
+
+    panel.classList.remove("visible");
+
+    setTimeout(() => {
+        map.invalidateSize();
+    }, 300);
+});
