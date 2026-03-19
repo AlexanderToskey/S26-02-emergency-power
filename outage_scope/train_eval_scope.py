@@ -66,7 +66,7 @@ def main():
     print(f"  Train samples: {len(X_train):,}")
     print(f"  Test samples (Year {TEST_YEAR}): {len(X_test):,}")
 
-    THRESHOLD = 500.0
+    THRESHOLD = 300.0
 
     # --- 4. Training ---
     print("\n" + "="*50)
@@ -112,8 +112,8 @@ def main():
     printEvaluationReport(metrics)
 
     print("\nTop Features for Short Specialist (Oracle Context):")
-    l_imp = model.getShortRegressorImportances()
-    for k, v in sorted(l_imp.items(), key=lambda x: x[1], reverse=True)[:50]:
+    s_imp = model.getShortRegressorImportances()
+    for k, v in sorted(s_imp.items(), key=lambda x: x[1], reverse=True)[:50]:
         print(f"  {k:30s} {v:.4f}")
 
     print("\nTop Features for Large Specialist (Oracle Context):")
