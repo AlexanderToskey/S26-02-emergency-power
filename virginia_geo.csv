@@ -1,0 +1,134 @@
+county_name,state_fips,county_fips,fips,latitude,longitude
+"Accomack County, Virginia",51,001,51001,37.7063323,-75.8069082
+"Albemarle County, Virginia",51,003,51003,38.0567092,-78.6114999
+"Alleghany County, Virginia",51,005,51005,37.8531975,-80.0534923
+"Amelia County, Virginia",51,007,51007,37.3212714,-77.973865
+"Amherst County, Virginia",51,009,51009,37.5588285,-79.1096901
+"Appomattox County, Virginia",51,011,51011,37.402489,-78.792953
+"Arlington County, Virginia",51,013,51013,38.8816208,-77.09098089999999
+"Augusta County, Virginia",51,015,51015,38.2004562,-79.24511489999999
+"Bath County, Virginia",51,017,51017,38.111733,-79.6502105
+"Bedford County, Virginia",51,019,51019,37.2538794,-79.4703885
+"Bland County, Virginia",51,021,51021,37.0924986,-81.1196075
+"Botetourt County, Virginia",51,023,51023,37.5774613,-79.7848422
+"Brunswick County, Virginia",51,025,51025,36.7570589,-77.8367282
+"Buchanan County, Virginia",51,027,51027,37.2403134,-81.9971108
+"Buckingham County, Virginia",51,029,51029,37.50700800000001,-78.5660852
+"Campbell County, Virginia",51,031,51031,37.221014,-79.1096901
+"Caroline County, Virginia",51,033,51033,38.0445557,-77.2864879
+"Carroll County, Virginia",51,035,51035,36.6778699,-80.7214417
+"Charles City County, Virginia",51,036,51036,37.4018216,-77.1485163
+"Charlotte County, Virginia",51,037,51037,37.0467412,-78.6114999
+"Chesterfield County, Virginia",51,041,51041,37.3673217,-77.6077865
+"Clarke County, Virginia",51,043,51043,39.15165830000001,-77.973865
+"Craig County, Virginia",51,045,51045,37.44658950000001,-80.23213129999999
+"Culpeper County, Virginia",51,047,51047,38.491821,-77.973865
+"Cumberland County, Virginia",51,049,51049,37.5175385,-78.24761459999999
+"Dickenson County, Virginia",51,051,51051,37.0929465,-82.34518899999999
+"Dinwiddie County, Virginia",51,053,51053,37.0769043,-77.6536125
+"Essex County, Virginia",51,057,51057,37.9671684,-76.964306
+"Fairfax County, Virginia",51,059,51059,38.74389439999999,-77.2405153
+"Fauquier County, Virginia",51,061,51061,38.7208787,-77.79097759999999
+"Floyd County, Virginia",51,063,51063,36.9446308,-80.32131059999999
+"Fluvanna County, Virginia",51,065,51065,37.8532863,-78.24761459999999
+"Franklin County, Virginia",51,067,51067,36.9458815,-79.8296743
+"Frederick County, Virginia",51,069,51069,39.17988,-78.24761459999999
+"Giles County, Virginia",51,071,51071,37.3132885,-80.6770787
+"Gloucester County, Virginia",51,073,51073,37.4128281,-76.5025742
+"Goochland County, Virginia",51,075,51075,37.74159969999999,-77.973865
+"Grayson County, Virginia",51,077,51077,36.6721195,-81.20781640000001
+"Greene County, Virginia",51,079,51079,38.3120359,-78.4524591
+"Greensville County, Virginia",51,081,51081,36.60568860000001,-77.6077865
+"Halifax County, Virginia",51,083,51083,36.6945049,-78.9288242
+"Hanover County, Virginia",51,085,51085,37.7772071,-77.5160788
+"Henrico County, Virginia",51,087,51087,37.5059332,-77.3324425
+"Henry County, Virginia",51,089,51089,36.6588867,-79.96403389999999
+"Highland County, Virginia",51,091,51091,38.3999743,-79.60528839999999
+"Isle of Wight County, Virginia",51,093,51093,36.9288915,-76.6874701
+"James City County, Virginia",51,095,51095,37.3002132,-76.8028933
+"King and Queen County, Virginia",51,097,51097,37.7298568,-76.8951551
+"King George County, Virginia",51,099,51099,38.2372863,-77.1485163
+"King William County, Virginia",51,101,51101,37.7372121,-77.1485163
+"Lancaster County, Virginia",51,103,51103,37.7475945,-76.5025742
+"Lee County, Virginia",51,105,51105,36.7075931,-83.03613759999999
+"Loudoun County, Virginia",51,107,51107,39.076767,-77.6536125
+"Louisa County, Virginia",51,109,51109,37.9925909,-77.973865
+"Lunenburg County, Virginia",51,111,51111,36.92614349999999,-78.24761459999999
+"Madison County, Virginia",51,113,51113,38.436934,-78.24761459999999
+"Mathews County, Virginia",51,115,51115,37.3912302,-76.317414
+"Mecklenburg County, Virginia",51,117,51117,36.6421724,-78.3842227
+"Middlesex County, Virginia",51,119,51119,37.6040106,-76.5257007
+"Montgomery County, Virginia",51,121,51121,37.2070304,-80.4103957
+"Nelson County, Virginia",51,125,51125,37.7478599,-78.8835548
+"New Kent County, Virginia",51,127,51127,37.4653757,-76.964306
+"Northampton County, Virginia",51,131,51131,37.226762,-75.9927652
+"Northumberland County, Virginia",51,133,51133,37.9035732,-76.4100267
+"Nottoway County, Virginia",51,135,51135,37.1148487,-78.0195387
+"Orange County, Virginia",51,137,51137,38.24266739999999,-77.973865
+"Page County, Virginia",51,139,51139,38.63013309999999,-78.52065
+"Patrick County, Virginia",51,141,51141,36.6886252,-80.32131059999999
+"Pittsylvania County, Virginia",51,143,51143,36.7440186,-79.4703885
+"Powhatan County, Virginia",51,145,51145,37.5643209,-77.88245959999999
+"Prince Edward County, Virginia",51,147,51147,37.1982888,-78.4297187
+"Prince George County, Virginia",51,149,51149,37.1593052,-77.2405153
+"Prince William County, Virginia",51,153,51153,38.7838939,-77.6077865
+"Pulaski County, Virginia",51,155,51155,37.0583986,-80.6770787
+"Rappahannock County, Virginia",51,157,51157,38.6762327,-78.1564432
+"Richmond County, Virginia",51,159,51159,37.9175609,-76.7105632
+"Roanoke County, Virginia",51,161,51161,37.2467123,-80.1205256
+"Rockbridge County, Virginia",51,163,51163,37.8062214,-79.5153773
+"Rockingham County, Virginia",51,165,51165,38.5825919,-78.8835548
+"Russell County, Virginia",51,167,51167,36.9904385,-82.08429009999999
+"Scott County, Virginia",51,169,51169,36.6815794,-82.605118
+"Shenandoah County, Virginia",51,171,51171,38.8413778,-78.5660852
+"Smyth County, Virginia",51,173,51173,36.8687921,-81.5596427
+"Southampton County, Virginia",51,175,51175,36.6788512,-77.10249019999999
+"Spotsylvania County, Virginia",51,177,51177,38.204165,-77.6077865
+"Stafford County, Virginia",51,179,51179,38.4334566,-77.4242972
+"Surry County, Virginia",51,181,51181,37.1185515,-76.8720961
+"Sussex County, Virginia",51,183,51183,36.9058167,-77.2405153
+"Tazewell County, Virginia",51,185,51185,37.124747,-81.5596427
+"Warren County, Virginia",51,187,51187,38.9331749,-78.24761459999999
+"Washington County, Virginia",51,191,51191,36.7678354,-81.9534815
+"Westmoreland County, Virginia",51,193,51193,38.112732,-76.7798172
+"Wise County, Virginia",51,195,51195,37.0240877,-82.605118
+"Wythe County, Virginia",51,197,51197,36.9220162,-81.1196075
+"York County, Virginia",51,199,51199,37.2103925,-76.3868797
+"Alexandria city, Virginia",51,510,51510,38.804693,-77.0435257
+"Bristol city, Virginia",51,520,51520,36.6159085,-82.1659243
+"Buena Vista city, Virginia",51,530,51530,37.7343004,-79.35392379999999
+"Charlottesville city, Virginia",51,540,51540,38.0301826,-78.4769353
+"Chesapeake city, Virginia",51,550,51550,36.7682088,-76.2874927
+"Colonial Heights city, Virginia",51,570,51570,37.244039,-77.4102607
+"Covington city, Virginia",51,580,51580,37.7934585,-79.99394629999999
+"Danville city, Virginia",51,590,51590,36.5859718,-79.39502279999999
+"Emporia city, Virginia",51,595,51595,36.6859829,-77.5424809
+"Fairfax city, Virginia",51,600,51600,38.8459879,-77.3053035
+"Falls Church city, Virginia",51,610,51610,38.88233400000001,-77.1710914
+"Franklin city, Virginia",51,620,51620,36.6776507,-76.9224608
+"Fredericksburg city, Virginia",51,630,51630,38.3003751,-77.4588059
+"Galax city, Virginia",51,640,51640,36.6612387,-80.9239671
+"Hampton city, Virginia",51,650,51650,37.0298687,-76.34522179999999
+"Harrisonburg city, Virginia",51,660,51660,38.4460017,-78.8697826
+"Hopewell city, Virginia",51,670,51670,37.3043154,-77.28720009999999
+"Lexington city, Virginia",51,678,51678,37.78402080000001,-79.4428157
+"Lynchburg city, Virginia",51,680,51680,37.4148819,-79.1422071
+"Manassas city, Virginia",51,683,51683,38.7512726,-77.4706769
+"Manassas Park city, Virginia",51,685,51685,38.7840035,-77.4697111
+"Martinsville city, Virginia",51,690,51690,36.6915262,-79.8725386
+"Newport News city, Virginia",51,700,51700,37.0870821,-76.4730122
+"Norfolk city, Virginia",51,710,51710,36.8507689,-76.28587259999999
+"Norton city, Virginia",51,720,51720,36.933433,-82.6290459
+"Petersburg city, Virginia",51,730,51730,37.2279279,-77.40192669999999
+"Poquoson city, Virginia",51,735,51735,37.1223664,-76.3457773
+"Portsmouth city, Virginia",51,740,51740,36.8354258,-76.2982742
+"Radford city, Virginia",51,750,51750,37.13179239999999,-80.5764477
+"Richmond city, Virginia",51,760,51760,37.5407246,-77.4360481
+"Roanoke city, Virginia",51,770,51770,37.2709116,-79.94494949999999
+"Salem city, Virginia",51,775,51775,37.2934681,-80.05476259999999
+"Staunton city, Virginia",51,790,51790,38.1494226,-79.0737047
+"Suffolk city, Virginia",51,800,51800,36.7282054,-76.5835621
+"Virginia Beach city, Virginia",51,810,51810,36.8516437,-75.97921939999999
+"Waynesboro city, Virginia",51,820,51820,38.0684692,-78.8894682
+"Williamsburg city, Virginia",51,830,51830,37.2757305,-76.7098049
+"Winchester city, Virginia",51,840,51840,39.1856597,-78.1633341
