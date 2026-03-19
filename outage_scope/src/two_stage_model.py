@@ -47,7 +47,7 @@ class TwoStageScopeModel:
         # ── Stage 1: classifier ───────────────────────────────────────────────
         defaultClassifierParams = {
             'objective': 'binary:logistic',
-            'eval_metric': 'aucpr',
+            'eval_metric': 'logloss',
             'max_depth': 5,
             'learning_rate': 0.1,
             'n_estimators': 500,

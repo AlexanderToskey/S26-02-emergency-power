@@ -410,7 +410,7 @@ def load_ghcnd_weather(filepath: Union[str, Path]) -> pd.DataFrame:
 
     print(f"[data_loader] Loading GHCN-Daily weather from {filepath} ...")
     df = pd.read_csv(filepath, dtype={"fips_code": str})
-    df["date"] = pd.to_datetime(df["date"]).dt.date
+    df["date"] = pd.to_datetime(df["date"])#.dt.date
 
     print(
         f"[data_loader] Loaded {len(df):,} county-day observations "

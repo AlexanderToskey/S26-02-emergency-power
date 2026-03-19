@@ -314,10 +314,12 @@ def prepare_features(
             # county historical patterns (strong classifier signal)
             "county_median_scope",
             "county_large_outage_rate",
+            "county_max_customers",
             # early outage dynamics
             "initial_customers_affected",
             "delta_customers_affected_15m",
             "pct_growth_15m",
+            "initial_impact_density",
             # NOAA Storm Events context (named events only, ~7% coverage)
             "has_weather_event",
             "max_magnitude",
@@ -455,11 +457,16 @@ def run_full_pipeline(
         .agg(
             county_median_scope="median",
             county_large_outage_rate=lambda x: (x >= 500).mean(),
+            county_max_customers="max",
         )
         .reset_index()
     )
+    county_stats["county_max_customers"] = county_stats["county_max_customers"].clip(lower=1)
+
     df = df.merge(county_stats, on="fips_code", how="left")
-    
+
+    df["initial_impact_density"] = df["initial_customers_affected"] / df["county_max_customers"]
+
     # Step 6: Prepare final features and target
     X, y = prepare_features(df)
 

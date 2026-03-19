@@ -61,8 +61,8 @@ def calculateMAPE(yTrue: np.ndarray, yPred: np.ndarray) -> float:
 
 def calculateToleranceAccuracy(yTrue: np.ndarray, yPred: np.ndarray,
                                shortThreshold: float = 500, # 500 Customers
-                               shortTolerance: float = 50,  # +/- 50 customers
-                               longTolerancePct: float = 0.20) -> Dict[str, float]: # +/- 20%
+                               shortTolerance: float = 5,  # +/- 50 customers
+                               longTolerancePct: float = 0.10) -> Dict[str, float]: # +/- 20%
     """
     calculates accuracy within tolerance as defined in the PRD for Scope
 

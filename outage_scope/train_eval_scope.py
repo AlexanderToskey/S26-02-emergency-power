@@ -42,10 +42,21 @@ def main():
     test_mask = X_full['year'] == TEST_YEAR
 
     INCLUDE_DYNAMIC_FEATURES = False
+    # cols_to_drop = ['year', 'county_max_customers', 'initial_impact_density']
     cols_to_drop = ['year']
+
     if not INCLUDE_DYNAMIC_FEATURES:
         print("[!] GENERALIZATION MODE: Removing growth features.")
-        cols_to_drop += ["initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m"]
+        cols_to_drop += ["initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m", "initial_impact_density"]
+
+    # cols_to_drop = []
+    # cols_to_drop = X_full.columns
+
+    # cols_to_keep = ['county_median_scope', 'has_weather_event', 'max_magnitude', 'event_High Wind', 'event_Thunderstorm Wind']
+    # cols_to_keep = ['max_magnitude']
+
+    # cols_to_drop = X_full.columns.difference(cols_to_keep)
+
 
     X = X_full.drop(columns=cols_to_drop)
 
@@ -100,17 +111,22 @@ def main():
     metrics = evaluateModel(y_test.values, final_preds)
     printEvaluationReport(metrics)
 
+    print("\nTop Features for Short Specialist (Oracle Context):")
+    l_imp = model.getShortRegressorImportances()
+    for k, v in sorted(l_imp.items(), key=lambda x: x[1], reverse=True)[:50]:
+        print(f"  {k:30s} {v:.4f}")
+
     print("\nTop Features for Large Specialist (Oracle Context):")
     l_imp = model.getLongRegressorImportances()
-    for k, v in sorted(l_imp.items(), key=lambda x: x[1], reverse=True)[:5]:
+    for k, v in sorted(l_imp.items(), key=lambda x: x[1], reverse=True)[:50]:
         print(f"  {k:30s} {v:.4f}")
 
     # --- 6.5 Save Scope Model ---
-    print("\nSaving two-stage scope model...")
-    model_dir = Path("../models")
-    model_dir.mkdir(parents=True, exist_ok=True)
+    # print("\nSaving two-stage scope model...")
+    # model_dir = Path("../models")
+    # model_dir.mkdir(parents=True, exist_ok=True)
     
-    model.save(model_dir / "scope_model.joblib")
+    # model.save(model_dir / "scope_model.joblib")
 
     # --- 7. Explainer (Optional) ---
     """
