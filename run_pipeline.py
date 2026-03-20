@@ -135,7 +135,7 @@ def main():
 
     # --- 2. Scope Model Oracle ---
     print("\n--- 2. Scope Model (Standalone - Perfect Gatekeeper) ---")
-    SCOPE_THRESHOLD = 500
+    SCOPE_THRESHOLD = 300.0
     oracle_scope_preds = np.zeros(len(X_scope_test))
     s_large_mask = y_scope_test >= SCOPE_THRESHOLD
     s_small_mask = y_scope_test < SCOPE_THRESHOLD
