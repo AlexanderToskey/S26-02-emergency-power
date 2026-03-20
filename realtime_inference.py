@@ -71,8 +71,10 @@ _prev_kubra:      Dict[str, float]  = {}     # fips_code -> customers (last poll
 _prev_kubra_time: Optional[datetime] = None
 
 _cached_predictions: Dict[str, Any] = {}
+_cached_features:    Dict[str, Any] = {}   # fips -> {weather, model_row} for explain endpoint
 _last_updated:       Optional[str]  = None
 _cache_lock = threading.Lock()
+_occ_explainer = None   # shap.TreeExplainer, initialized in init()
 
 
 # ── Initialisation ─────────────────────────────────────────────────────────────
@@ -93,6 +95,16 @@ def init() -> bool:
         _scope_model = TwoStageScopeModel.load(MODELS_DIR / "scope_model.joblib")
         _dur_model   = TwoStageOutageModel.load(MODELS_DIR / "duration_model.joblib")
         print("[realtime] All three models loaded successfully.")
+
+        # Build SHAP explainer for the occurrence model
+        try:
+            import shap as _shap
+            global _occ_explainer
+            _occ_explainer = _shap.TreeExplainer(_occ_model.model)
+            print("[realtime] SHAP explainer initialized.")
+        except Exception as shap_err:
+            print(f"[realtime] WARNING: SHAP explainer failed to initialize: {shap_err}")
+
     except Exception as e:
         print(f"[realtime] ERROR loading models: {e}")
         ok = False
@@ -455,7 +467,7 @@ def run_inference() -> Dict[str, Any]:
         dict: { fips_code (str) -> {"occurrence": bool, "scope": float,
                                     "duration": float, "occ_prob": float} }
     """
-    global _prev_kubra, _prev_kubra_time, _cached_predictions, _last_updated
+    global _prev_kubra, _prev_kubra_time, _cached_predictions, _cached_features, _last_updated
 
     if _occ_model is None:
         print("[realtime] Models not loaded. Call init() first.")
@@ -516,6 +528,22 @@ def run_inference() -> Dict[str, Any]:
 
     X_occ = _align_features(occ_df, _occ_model.feature_columns)
     X_occ = X_occ.apply(pd.to_numeric, errors="coerce").fillna(0)
+
+    # Cache weather + aligned model features per county for the /api/explain endpoint
+    _weather_display_cols = [
+        "tmax_c", "tmin_c", "awnd_ms", "wsfg_ms", "prcp_mm", "snow_mm", "snwd_mm",
+        "wt_thunder", "wt_fog", "wt_snow", "wt_freezing_rain",
+        "wt_ice", "wt_blowing_snow", "wt_drizzle", "wt_rain", "has_weather_event",
+    ]
+    new_features = {}
+    for i in weather_df.index:
+        fips = str(weather_df.at[i, "fips_code"])
+        new_features[fips] = {
+            "weather":   {k: float(weather_df.at[i, k]) for k in _weather_display_cols if k in weather_df.columns},
+            "model_row": {col: float(X_occ.at[i, col]) for col in X_occ.columns},
+        }
+    with _cache_lock:
+        _cached_features.update(new_features)
 
     occ_preds, occ_probs = _occ_model.predict(X_occ)
 
@@ -651,3 +679,61 @@ def get_last_updated() -> Optional[str]:
     """Return the timestamp string of the last successful inference run."""
     with _cache_lock:
         return _last_updated
+
+
+def get_features_for_fips(fips: str) -> Optional[dict]:
+    """Return the cached {weather, model_row} dict for a county (thread-safe)."""
+    with _cache_lock:
+        return _cached_features.get(fips)
+
+
+def compute_shap_for_fips(fips: str) -> Optional[dict]:
+    """
+    Compute SHAP values for the occurrence model prediction for one county.
+    Returns the top-10 features by absolute SHAP value, plus the base value.
+    Returns None if the explainer is unavailable or features are not cached.
+    """
+    if _occ_explainer is None or _occ_model is None:
+        return None
+
+    features = get_features_for_fips(fips)
+    if not features:
+        return None
+
+    X_row = pd.DataFrame([features["model_row"]])[_occ_model.feature_columns]
+    shap_vals = _occ_explainer.shap_values(X_row)
+
+    # TreeExplainer for binary classifier may return a list [neg_class, pos_class]
+    # or a single array depending on the SHAP version
+    if isinstance(shap_vals, list):
+        sv = np.array(shap_vals[1][0])
+    else:
+        sv = np.array(shap_vals[0])
+
+    base_value = _occ_explainer.expected_value
+    if isinstance(base_value, (list, np.ndarray)):
+        base_value = float(base_value[1])
+    else:
+        base_value = float(base_value)
+
+    feature_names = _occ_model.feature_columns
+    model_row     = features["model_row"]
+
+    # Return top 10 features sorted by absolute SHAP contribution
+    ranked = sorted(
+        zip(feature_names, sv),
+        key=lambda x: abs(x[1]),
+        reverse=True,
+    )[:10]
+
+    return {
+        "base_value": round(base_value, 4),
+        "features": [
+            {
+                "name":  name,
+                "value": round(float(model_row.get(name, 0.0)), 3),
+                "shap":  round(float(sv_val), 4),
+            }
+            for name, sv_val in ranked
+        ],
+    }

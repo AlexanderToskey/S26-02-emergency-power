@@ -245,6 +245,205 @@ body {
 
 /* ── Explanation panel content ──────────────────────────────────────────────── */
 
+.panel-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #6b7280;
+    padding: 20px 0;
+}
+
+.panel-spinner {
+    width: 18px;
+    height: 18px;
+    border: 3px solid #e5e7eb;
+    border-top: 3px solid #4f46e5;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+.panel-section {
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.panel-section:last-child {
+    border-bottom: none;
+}
+
+.panel-section-title {
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6b7280;
+    margin-bottom: 8px;
+}
+
+/* ── Occurrence probability bar ─────────────────────────────────────────────── */
+
+.prob-bar-wrap {
+    background: #f3f4f6;
+    border-radius: 4px;
+    height: 10px;
+    overflow: hidden;
+    margin-bottom: 5px;
+}
+
+.prob-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+}
+
+.prob-label {
+    font-size: 12px;
+    color: #374151;
+}
+
+/* ── Prediction values grid ─────────────────────────────────────────────────── */
+
+.pred-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.pred-item {
+    background: #f8fafc;
+    border-radius: 6px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pred-label {
+    font-size: 10px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.pred-value {
+    font-size: 15px;
+    font-weight: bold;
+    color: #1f2937;
+}
+
+/* ── Weather inputs grid ────────────────────────────────────────────────────── */
+
+.weather-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 8px;
+    margin-bottom: 8px;
+}
+
+.wx-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.wx-label {
+    font-size: 10px;
+    color: #9ca3af;
+}
+
+.wx-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.wx-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.wx-flag {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 11px;
+}
+
+/* ── SHAP bar chart ──────────────────────────────────────────────────────────── */
+
+.shap-legend {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: #6b7280;
+    margin-bottom: 8px;
+}
+
+.shap-pos-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #dc2626;
+    flex-shrink: 0;
+}
+
+.shap-neg-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #2563eb;
+    flex-shrink: 0;
+}
+
+.shap-row {
+    display: grid;
+    grid-template-columns: 90px 1fr 44px;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 5px;
+}
+
+.shap-name {
+    font-size: 11px;
+    color: #374151;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.shap-bar-wrap {
+    background: #f3f4f6;
+    border-radius: 3px;
+    height: 8px;
+    overflow: hidden;
+}
+
+.shap-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.shap-bar.positive { background: #dc2626; }
+.shap-bar.negative { background: #2563eb; }
+
+.shap-val {
+    font-size: 10px;
+    font-weight: 600;
+    text-align: right;
+}
+
+.shap-val.positive { color: #dc2626; }
+.shap-val.negative { color: #2563eb; }
+
+/* ── Explanation panel content ──────────────────────────────────────────────── */
+
 /* Loading state */
 .panel-loading {
     display: flex;
