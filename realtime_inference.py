@@ -16,6 +16,7 @@ import json
 import threading
 import urllib.request
 import urllib.error
+import shap
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -75,7 +76,14 @@ _cached_features:    Dict[str, Any] = {}   # fips -> {weather, model_row} for ex
 _last_updated:       Optional[str]  = None
 _cache_lock = threading.Lock()
 _occ_explainer = None   # shap.TreeExplainer, initialized in init()
+_scope_explainer_small = None
+_scope_explainer_large=None
+_scope_explainer_classifier=None
+_duration_explainer_small=None
+_duration_explainer_large=None
+_duration_explainer_classifier=None
 
+_EXPLAINER_NAMES = {}
 
 # ── Initialisation ─────────────────────────────────────────────────────────────
 
@@ -87,6 +95,7 @@ def init() -> bool:
     (the pipeline will still run with degraded features).
     """
     global _occ_model, _scope_model, _dur_model, _geo, _county_stats
+    global _EXPLAINER_NAMES
     ok = True
 
     # --- Models ---
@@ -98,9 +107,28 @@ def init() -> bool:
 
         # Build SHAP explainer for the occurrence model
         try:
-            import shap as _shap
-            global _occ_explainer
-            _occ_explainer = _shap.TreeExplainer(_occ_model.model)
+
+            global _occ_explainer, _scope_explainer_small, _scope_explainer_large, _scope_explainer_classifier
+            global _duration_explainer_small, _duration_explainer_large, _duration_explainer_classifier
+            _occ_explainer = shap.TreeExplainer(_occ_model.model)
+            _scope_explainer_small = shap.TreeExplainer(_scope_model.shortRegressor)
+            _scope_explainer_large = shap.TreeExplainer(_scope_model.longRegressor)
+            _scope_explainer_classifier = shap.TreeExplainer(_scope_model.classifier)
+            _duration_explainer_small = shap.TreeExplainer(_dur_model.shortRegressor)
+            _duration_explainer_large = shap.TreeExplainer(_dur_model.longRegressor)
+            _duration_explainer_classifier = shap.TreeExplainer(_dur_model.classifier)
+            
+            _EXPLAINER_NAMES = {
+                "_occ_explainer" : (_occ_explainer, _occ_model),
+                "_scope_explainer_small" : (_scope_explainer_small, _scope_model),
+                "_scope_explainer_large" : (_scope_explainer_large, _scope_model),
+                "_scope_explainer_classifier" : (_scope_explainer_classifier, _scope_model),
+                "_duration_explainer_small" : (_duration_explainer_small, _dur_model),
+                "_duration_explainer_large" : (_duration_explainer_large, _dur_model),
+                "_duration_explainer_classifier" : (_duration_explainer_classifier, _dur_model),
+            }
+
+            
             print("[realtime] SHAP explainer initialized.")
         except Exception as shap_err:
             print(f"[realtime] WARNING: SHAP explainer failed to initialize: {shap_err}")
@@ -529,22 +557,6 @@ def run_inference() -> Dict[str, Any]:
     X_occ = _align_features(occ_df, _occ_model.feature_columns)
     X_occ = X_occ.apply(pd.to_numeric, errors="coerce").fillna(0)
 
-    # Cache weather + aligned model features per county for the /api/explain endpoint
-    _weather_display_cols = [
-        "tmax_c", "tmin_c", "awnd_ms", "wsfg_ms", "prcp_mm", "snow_mm", "snwd_mm",
-        "wt_thunder", "wt_fog", "wt_snow", "wt_freezing_rain",
-        "wt_ice", "wt_blowing_snow", "wt_drizzle", "wt_rain", "has_weather_event",
-    ]
-    new_features = {}
-    for i in weather_df.index:
-        fips = str(weather_df.at[i, "fips_code"])
-        new_features[fips] = {
-            "weather":   {k: float(weather_df.at[i, k]) for k in _weather_display_cols if k in weather_df.columns},
-            "model_row": {col: float(X_occ.at[i, col]) for col in X_occ.columns},
-        }
-    with _cache_lock:
-        _cached_features.update(new_features)
-
     occ_preds, occ_probs = _occ_model.predict(X_occ)
 
     occ_mask = pd.Series(occ_preds == 1, index=weather_df.index)
@@ -646,7 +658,39 @@ def run_inference() -> Dict[str, Any]:
 
         print("[realtime] Stages 2 & 3 complete.")
 
+
     # ── Step 7: Build and cache output ────────────────────────────────────────
+    # Cache weather + aligned model features per county for the /api/explain endpoint
+    event_dict = {}
+    if n_flagged > 0:
+        for _, row in event_df.iterrows():
+            fips_key = str(row["fips_code"])
+            event_dict[fips_key] = row.to_dict()
+    
+    _weather_display_cols = [
+        "tmax_c", "tmin_c", "awnd_ms", "wsfg_ms", "prcp_mm", "snow_mm", "snwd_mm",
+        "wt_thunder", "wt_fog", "wt_snow", "wt_freezing_rain",
+        "wt_ice", "wt_blowing_snow", "wt_drizzle", "wt_rain", "has_weather_event",
+    ]
+    new_features = {}
+    for i in weather_df.index:
+        fips = str(weather_df.at[i, "fips_code"])
+        model_row = {col: float(X_occ.at[i, col]) for col in X_occ.columns}
+        for col in _scope_model.featureNames + _dur_model.featureNames:
+            if col not in model_row:
+                model_row[col] = 0.0
+        if fips in event_dict:
+            for col in _scope_model.featureNames + _dur_model.featureNames:
+                if col in event_dict[fips]:
+                    model_row[col] = float(event_dict[fips][col])
+        new_features[fips] = {
+            "weather":   {k: float(weather_df.at[i, k]) for k in _weather_display_cols if k in weather_df.columns},
+            "model_row": model_row,
+        }
+    with _cache_lock:
+        _cached_features.update(new_features)
+
+
     results: Dict[str, Any] = {}
     for i in weather_df.index:
         fips = str(weather_df.at[i, "fips_code"])
@@ -687,21 +731,28 @@ def get_features_for_fips(fips: str) -> Optional[dict]:
         return _cached_features.get(fips)
 
 
-def compute_shap_for_fips(fips: str) -> Optional[dict]:
+def compute_shap_for_fips(fips: str, explainer_name: str) -> Optional[dict]:
     """
     Compute SHAP values for the occurrence model prediction for one county.
     Returns the top-10 features by absolute SHAP value, plus the base value.
     Returns None if the explainer is unavailable or features are not cached.
     """
-    if _occ_explainer is None or _occ_model is None:
+
+    explainer, model = _EXPLAINER_NAMES[explainer_name]
+    if explainer_name == '_occ_explainer':
+        feature_names = model.feature_columns
+    else:
+        feature_names = model.featureNames
+
+    if explainer is None or model is None:
         return None
 
     features = get_features_for_fips(fips)
     if not features:
         return None
 
-    X_row = pd.DataFrame([features["model_row"]])[_occ_model.feature_columns]
-    shap_vals = _occ_explainer.shap_values(X_row)
+    X_row = pd.DataFrame([features["model_row"]])[feature_names]
+    shap_vals = explainer.shap_values(X_row)
 
     # TreeExplainer for binary classifier may return a list [neg_class, pos_class]
     # or a single array depending on the SHAP version
@@ -710,13 +761,12 @@ def compute_shap_for_fips(fips: str) -> Optional[dict]:
     else:
         sv = np.array(shap_vals[0])
 
-    base_value = _occ_explainer.expected_value
+    base_value = explainer.expected_value
     if isinstance(base_value, (list, np.ndarray)):
         base_value = float(base_value[1])
     else:
         base_value = float(base_value)
 
-    feature_names = _occ_model.feature_columns
     model_row     = features["model_row"]
 
     # Return top 10 features sorted by absolute SHAP contribution

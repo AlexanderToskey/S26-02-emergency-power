@@ -193,21 +193,65 @@ function renderExplainPanel(container, explainData) {
         <div class="panel-section model-tabs-section">
             <div class="panel-section-title">Model Analysis</div>
             <div class="model-tab-bar">
-                <button class="model-tab active" data-tab="occurrence">Occurrence</button>
-                <button class="model-tab" data-tab="scope">Scope</button>
-                <button class="model-tab" data-tab="duration">Duration</button>
-                <button class="model-tab" data-tab="scope-binary">Scope Binary</button>
-                <button class="model-tab" data-tab="duration-binary">Duration Binary</button>
+                <button class="model-tab active" data-tab="_occ_explainer">Occurrence</button>
+                <button class="model-tab" data-tab="_scope_explainer_classifier">Scope Classifier</button>
+                <button class="model-tab" data-tab="_scope_explainer_small">Scope Small</button>
+                <button class="model-tab" data-tab="_scope_explainer_large">Scope Large</button>
+                <button class="model-tab" data-tab="_duration_explainer_classifier">Duration Classifier</button>
+                <button class="model-tab" data-tab="_duration_explainer_small">Duration Small</button>
+                <button class="model-tab" data-tab="_duration_explainer_large">Duration Large</button>
             </div>
-            <div class="model-tab-content"></div>
+            <div id="shap-list-container">
+                </div>
         </div>`;
 
     // ── SHAP feature contributions ─────────────────────────────────────────
-    let shapHtml = "";
-    if (shap && shap.features && shap.features.length > 0) {
+    // let shapHtml = "";
+    // if (shap && shap.features && shap.features.length > 0) {
+    //     const maxAbs = Math.max(...shap.features.map(f => Math.abs(f.shap)), 0.0001);
+
+    //     const bars = shap.features.map(f => {
+    //         const pct  = (Math.abs(f.shap) / maxAbs * 100).toFixed(1);
+    //         const dir  = f.shap >= 0 ? "positive" : "negative";
+    //         const sign = f.shap >= 0 ? "+" : "";
+    //         return `
+    //             <div class="shap-row">
+    //                 <span class="shap-name" title="${f.name}">${featureLabel(f.name)}</span>
+    //                 <div class="shap-bar-wrap">
+    //                     <div class="shap-bar ${dir}" style="width:${pct}%"></div>
+    //                 </div>
+    //                 <span class="shap-val ${dir}">${sign}${f.shap.toFixed(3)}</span>
+    //             </div>`;
+    //     }).join("");
+
+    //     shapHtml = `
+    //         <div class="panel-section">
+    //             <div class="panel-section-title">Model Drivers (SHAP)</div>
+    //             <div class="shap-legend">
+    //                 <span class="shap-pos-dot"></span><span>pushes toward outage</span>
+    //                 &nbsp;&nbsp;
+    //                 <span class="shap-neg-dot"></span><span>pushes away</span>
+    //             </div>
+    //             ${bars}
+    //         </div>`;
+    // } else if (shap === null) {
+    //     shapHtml = `<div class="panel-section"><em>SHAP explainer unavailable.</em></div>`;
+    // }
+
+    container.innerHTML = probHtml + predHtml + wxHtml + tabsHtml;// + shapHtml;
+
+    const updateBars = (tabName) => {
+        const target = document.getElementById("shap-list-container");
+        const shap = explainData[tabName]; // Access the specific model's data
+        
+        if (!shap || !shap.features) {
+            target.innerHTML = "<em>No data for this model.</em>";
+            return;
+        }
+
         const maxAbs = Math.max(...shap.features.map(f => Math.abs(f.shap)), 0.0001);
 
-        const bars = shap.features.map(f => {
+        target.innerHTML = shap.features.map(f => {
             const pct  = (Math.abs(f.shap) / maxAbs * 100).toFixed(1);
             const dir  = f.shap >= 0 ? "positive" : "negative";
             const sign = f.shap >= 0 ? "+" : "";
@@ -220,28 +264,18 @@ function renderExplainPanel(container, explainData) {
                     <span class="shap-val ${dir}">${sign}${f.shap.toFixed(3)}</span>
                 </div>`;
         }).join("");
+    };
 
-        shapHtml = `
-            <div class="panel-section">
-                <div class="panel-section-title">Model Drivers (SHAP)</div>
-                <div class="shap-legend">
-                    <span class="shap-pos-dot"></span><span>pushes toward outage</span>
-                    &nbsp;&nbsp;
-                    <span class="shap-neg-dot"></span><span>pushes away</span>
-                </div>
-                ${bars}
-            </div>`;
-    } else if (shap === null) {
-        shapHtml = `<div class="panel-section"><em>SHAP explainer unavailable.</em></div>`;
-    }
-
-    container.innerHTML = probHtml + predHtml + wxHtml + tabsHtml + shapHtml;
+    updateBars("_occ_explainer");
 
     // Tab switching
     container.querySelectorAll(".model-tab").forEach(btn => {
         btn.addEventListener("click", () => {
             container.querySelectorAll(".model-tab").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
+
+            const tabName = btn.getAttribute("data-tab");
+            updateBars(tabName);
         });
     });
 }
