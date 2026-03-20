@@ -188,6 +188,20 @@ function renderExplainPanel(container, explainData) {
             ${activeFlags ? `<div class="wx-flags">${activeFlags}</div>` : ""}
         </div>`;
 
+    // ── Model analysis tabs ────────────────────────────────────────────────
+    const tabsHtml = `
+        <div class="panel-section model-tabs-section">
+            <div class="panel-section-title">Model Analysis</div>
+            <div class="model-tab-bar">
+                <button class="model-tab active" data-tab="occurrence">Occurrence</button>
+                <button class="model-tab" data-tab="scope">Scope</button>
+                <button class="model-tab" data-tab="duration">Duration</button>
+                <button class="model-tab" data-tab="scope-binary">Scope Binary</button>
+                <button class="model-tab" data-tab="duration-binary">Duration Binary</button>
+            </div>
+            <div class="model-tab-content"></div>
+        </div>`;
+
     // ── SHAP feature contributions ─────────────────────────────────────────
     let shapHtml = "";
     if (shap && shap.features && shap.features.length > 0) {
@@ -221,7 +235,15 @@ function renderExplainPanel(container, explainData) {
         shapHtml = `<div class="panel-section"><em>SHAP explainer unavailable.</em></div>`;
     }
 
-    container.innerHTML = probHtml + predHtml + wxHtml + shapHtml;
+    container.innerHTML = probHtml + predHtml + wxHtml + tabsHtml + shapHtml;
+
+    // Tab switching
+    container.querySelectorAll(".model-tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+            container.querySelectorAll(".model-tab").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+        });
+    });
 }
 
 // Opens the right-side panel and fetches live explain data for the county
