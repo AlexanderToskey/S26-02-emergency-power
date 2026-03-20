@@ -41,9 +41,25 @@ def main():
     train_mask = X_full['year'] < TEST_YEAR
     test_mask = X_full['year'] == TEST_YEAR
 
-    INCLUDE_DYNAMIC_FEATURES = False
+                # "event_Avalanche":         0,
+                # "event_Coastal Flood":     0,
+                # "event_Cold/Wind Chill":   int(tmin < -10),
+                # "event_Debris Flow":       0,
+                # "event_Drought":           0,
+                # "event_Excessive Heat":    int(row.get("tmax_c", 0) > 38),
+                # "event_Extreme Cold/Wind Chill": int(tmin < -20),
+                # "event_Funnel Cloud":      0,
+                # "event_Heat":              int(row.get("tmax_c", 0) > 32),
+                # "event_Rip Current":       0,
+                # "event_Tornado":           0,
+                # "event_Tropical Storm":    int(gust > 33 and prcp > 25),
+                # "event_Wildfire":          0,
+
+    INCLUDE_DYNAMIC_FEATURES = True
     # cols_to_drop = ['year', 'county_max_customers', 'initial_impact_density']
     cols_to_drop = ['year']
+    cols_to_drop += ['event_Avalanche','event_Coastal Flood','event_Debris Flow','event_Drought',
+                     'event_Funnel Cloud','event_Rip Current','event_Tornado','event_Wildfire']
 
     if not INCLUDE_DYNAMIC_FEATURES:
         print("[!] GENERALIZATION MODE: Removing growth features.")
@@ -122,13 +138,18 @@ def main():
         print(f"  {k:30s} {v:.4f}")
 
     # --- 6.5 Save Scope Model ---
-    # print("\nSaving two-stage scope model...")
-    # model_dir = Path("../models")
-    # model_dir.mkdir(parents=True, exist_ok=True)
+    print("\nSaving two-stage scope model...")
+    model_dir = Path("../models")
+    model_dir.mkdir(parents=True, exist_ok=True)
     
-    # model.save(model_dir / "scope_model.joblib")
+    model.save(model_dir / "scope_model.joblib")
 
     # --- 7. Explainer (Optional) ---
+
+    # "classifier": shap.TreeExplainer(model.classifier),
+    # "short_regressor": shap.TreeExplainer(model.shortRegressor),
+    # "long_regressor": shap.TreeExplainer(model.longRegressor)
+
     """
     print("\nGenerating SHAP Explanations...")
     try:
