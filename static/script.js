@@ -8,6 +8,16 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 let predictions = {};
 let geojson;
 
+function formatCountyName(name, fips) {
+    const countyCode = parseInt(fips.slice(2));
+
+    if (countyCode >= 500) {
+        return `${name} City`;
+    } else {
+        return `${name} County`;
+    }
+}
+
 // Style counties
 function styleFunction(feature) {
 
@@ -29,25 +39,26 @@ function styleFunction(feature) {
 
 // Tooltip behavior
 function onEachFeature(feature, layer) {
-
     const fips = String(feature.properties.GEOID);
     const name = feature.properties.NAME;
+    const displayName = formatCountyName(name, fips);
     const data = predictions[fips];
 
     layer.on({
-
         mouseover: function () {
             let props;
+
             if (data && data.occurrence) {
                 props = `
-                    <b>${name} County</b><br/>
+                    <b>${displayName}</b><br/>
                     Outage Predicted<br/>
                     Projected # of Affected Customers: ${data.scope}<br/>
                     Projected Outage Duration: ${data.duration} hrs
                 `;
             } else {
-                props = `<b>${name} County</b><br/>No Outage Predicted`;
+                props = `<b>${displayName}</b><br/>No Outage Predicted`;
             }
+
             layer.bindTooltip(props).openTooltip();
             layer.setStyle({ weight: 3 });
         },
@@ -218,8 +229,9 @@ function showInfoPanel(name, fips, _data) {
     const panel   = document.getElementById("infoPanel");
     const title   = document.getElementById("countyName");
     const details = document.getElementById("countyDetails");
+    title.textContent = formatCountyName(name, fips);
 
-    title.textContent = `${name} County`;
+   
     details.innerHTML = `<div class="panel-loading"><div class="panel-spinner"></div>Loading analysis…</div>`;
 
     panel.classList.remove("hidden");
@@ -270,7 +282,7 @@ function populateSidebar(countiesData) {
         }
 
         row.innerHTML = `
-            <td>${name} County</td>
+            <td>${formatCountyName(name, fips)}</td>
             <td>${hasOutage
                 ? `<span class="badge ${severity}">${label}</span>`
                 : `<span class="no-outage-text">None</span>`
