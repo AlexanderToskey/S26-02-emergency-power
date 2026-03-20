@@ -8,7 +8,7 @@ import realtime_inference
 
 app = Flask(__name__)
 
-# ── Startup: load models and run first inference ───────────────────────────────
+#  Startup: load models and run first inference
 
 def _background_refresh(interval_seconds: int = 900):
     """
@@ -43,7 +43,7 @@ def _startup():
     print("[app] Background refresh thread started (interval: 15 min).")
 
 
-# ── Routes ─────────────────────────────────────────────────────────────────────
+# Routes
 
 @app.route("/")
 def index():
@@ -74,6 +74,37 @@ def predictions():
     return jsonify(data)
 
 
+@app.route("/api/explain/<fips>")
+def explain(fips):
+    """
+    Returns weather inputs and SHAP feature contributions for one county.
+    Used by the explanation panel when a county is clicked.
+    Response shape:
+        { fips, occurrence, occ_prob, scope, duration,
+          weather: { tmax_c, tmin_c, awnd_ms, wsfg_ms, prcp_mm, ... },
+          shap:    { base_value, features: [{name, value, shap}, ...] } }
+    """
+    pred = realtime_inference.get_cached_predictions().get(fips)
+    if pred is None:
+        return jsonify({"error": "No prediction cached for this county."}), 404
+
+    features = realtime_inference.get_features_for_fips(fips)
+    if not features:
+        return jsonify({"error": "No features cached for this county."}), 404
+
+    shap_data = realtime_inference.compute_shap_for_fips(fips)
+
+    return jsonify({
+        "fips":       fips,
+        "occurrence": pred["occurrence"],
+        "occ_prob":   pred["occ_prob"],
+        "scope":      pred["scope"],
+        "duration":   pred["duration"],
+        "weather":    features["weather"],
+        "shap":       shap_data,
+    })
+
+
 @app.route("/api/status")
 def status():
     """Returns model load status and last inference timestamp."""
@@ -84,7 +115,7 @@ def status():
     })
 
 
-# ── Entry point ────────────────────────────────────────────────────────────────
+# Entry point
 
 if __name__ == "__main__":
     _startup()

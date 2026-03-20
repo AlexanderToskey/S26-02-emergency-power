@@ -58,163 +58,249 @@ function onEachFeature(feature, layer) {
         },
 
         click: function () {
-            showInfoPanel(name, data);
+            showInfoPanel(name, fips, data);
         }
     });
 }
 
-// Displays the SHAP feature importance on the left side of the screen
-function showInfoPanel(name, data) {
-    const panel = document.getElementById("infoPanel");
-    const mapDiv = document.getElementById("map");
-    const title = document.getElementById("countyName");
+// ── Explanation panel rendering ────────────────────────────────────────────────
+
+// Human-readable labels for weather features
+const WX_LABELS = {
+    tmax_c:           "Max Temp",
+    tmin_c:           "Min Temp",
+    awnd_ms:          "Avg Wind",
+    wsfg_ms:          "Wind Gusts",
+    prcp_mm:          "Precipitation",
+    snow_mm:          "Snowfall",
+    snwd_mm:          "Snow Depth",
+};
+
+const WX_UNITS = {
+    tmax_c: "°C", tmin_c: "°C",
+    awnd_ms: "m/s", wsfg_ms: "m/s",
+    prcp_mm: "mm", snow_mm: "mm", snwd_mm: "mm",
+};
+
+// Active weather condition flags with display labels
+const FLAG_LABELS = {
+    wt_thunder:       "⛈ Thunderstorm",
+    wt_fog:           "🌫 Fog",
+    wt_snow:          "❄ Snow",
+    wt_freezing_rain: "🌨 Freezing Rain",
+    wt_ice:           "🧊 Ice",
+    wt_blowing_snow:  "💨 Blowing Snow",
+    wt_rain:          "🌧 Rain",
+    wt_drizzle:       "🌦 Drizzle",
+};
+
+// Human-readable names for model feature columns shown in SHAP chart
+const FEATURE_LABELS = {
+    fips_code:    "County (FIPS)",
+    year: "Year", month: "Month", day: "Day", dayofweek: "Day of Week",
+    prcp_mm:      "Precipitation",
+    snow_mm:      "Snowfall",
+    snwd_mm:      "Snow Depth",
+    tmax_c:       "Max Temp",
+    tmin_c:       "Min Temp",
+    awnd_ms:      "Avg Wind Speed",
+    wsfg_ms:      "Wind Gusts",
+    wt_fog:       "Fog",
+    wt_thunder:   "Thunderstorm",
+    wt_snow:      "Snow Flag",
+    wt_freezing_rain: "Freezing Rain",
+    wt_ice:       "Ice",
+    wt_blowing_snow:  "Blowing Snow",
+    wt_drizzle:   "Drizzle",
+    wt_rain:      "Rain",
+    has_weather_event: "Severe Weather",
+    max_magnitude:     "Event Magnitude",
+    magnitude_missing: "Magnitude Missing",
+};
+
+function featureLabel(name) {
+    return FEATURE_LABELS[name] || name.replace(/_/g, " ");
+}
+
+function renderExplainPanel(container, explainData) {
+    const occ  = explainData.occurrence;
+    const prob = Math.round((explainData.occ_prob || 0) * 100);
+    const w    = explainData.weather || {};
+    const shap = explainData.shap;
+
+    // ── Occurrence probability bar ─────────────────────────────────────────
+    const probColor = prob >= 70 ? "#dc2626" : prob >= 40 ? "#f97316" : "#16a34a";
+    const probHtml = `
+        <div class="panel-section">
+            <div class="panel-section-title">Outage Probability</div>
+            <div class="prob-bar-wrap">
+                <div class="prob-bar" style="width:${prob}%; background:${probColor}"></div>
+            </div>
+            <div class="prob-label">${prob}% likelihood of outage today</div>
+        </div>`;
+
+    // ── Scope + duration (only if outage predicted) ────────────────────────
+    const predHtml = occ ? `
+        <div class="panel-section">
+            <div class="panel-section-title">Predictions</div>
+            <div class="pred-grid">
+                <div class="pred-item">
+                    <span class="pred-label">Customers Affected</span>
+                    <span class="pred-value">${Math.round(explainData.scope).toLocaleString()}</span>
+                </div>
+                <div class="pred-item">
+                    <span class="pred-label">Est. Duration</span>
+                    <span class="pred-value">${explainData.duration} hrs</span>
+                </div>
+            </div>
+        </div>` : "";
+
+    // ── Weather inputs ─────────────────────────────────────────────────────
+    const wxRows = Object.entries(WX_LABELS).map(([key, label]) => {
+        const val = w[key];
+        const display = val != null ? `${parseFloat(val).toFixed(1)} ${WX_UNITS[key]}` : "—";
+        return `<div class="wx-item">
+                    <span class="wx-label">${label}</span>
+                    <span class="wx-value">${display}</span>
+                </div>`;
+    }).join("");
+
+    const activeFlags = Object.entries(FLAG_LABELS)
+        .filter(([key]) => w[key] === 1)
+        .map(([, label]) => `<span class="wx-flag">${label}</span>`)
+        .join("");
+
+    const wxHtml = `
+        <div class="panel-section">
+            <div class="panel-section-title">Today's Weather Inputs</div>
+            <div class="weather-grid">${wxRows}</div>
+            ${activeFlags ? `<div class="wx-flags">${activeFlags}</div>` : ""}
+        </div>`;
+
+    // ── SHAP feature contributions ─────────────────────────────────────────
+    let shapHtml = "";
+    if (shap && shap.features && shap.features.length > 0) {
+        const maxAbs = Math.max(...shap.features.map(f => Math.abs(f.shap)), 0.0001);
+
+        const bars = shap.features.map(f => {
+            const pct  = (Math.abs(f.shap) / maxAbs * 100).toFixed(1);
+            const dir  = f.shap >= 0 ? "positive" : "negative";
+            const sign = f.shap >= 0 ? "+" : "";
+            return `
+                <div class="shap-row">
+                    <span class="shap-name" title="${f.name}">${featureLabel(f.name)}</span>
+                    <div class="shap-bar-wrap">
+                        <div class="shap-bar ${dir}" style="width:${pct}%"></div>
+                    </div>
+                    <span class="shap-val ${dir}">${sign}${f.shap.toFixed(3)}</span>
+                </div>`;
+        }).join("");
+
+        shapHtml = `
+            <div class="panel-section">
+                <div class="panel-section-title">Model Drivers (SHAP)</div>
+                <div class="shap-legend">
+                    <span class="shap-pos-dot"></span><span>pushes toward outage</span>
+                    &nbsp;&nbsp;
+                    <span class="shap-neg-dot"></span><span>pushes away</span>
+                </div>
+                ${bars}
+            </div>`;
+    } else if (shap === null) {
+        shapHtml = `<div class="panel-section"><em>SHAP explainer unavailable.</em></div>`;
+    }
+
+    container.innerHTML = probHtml + predHtml + wxHtml + shapHtml;
+}
+
+// Opens the right-side panel and fetches live explain data for the county
+function showInfoPanel(name, fips, _data) {
+    const panel   = document.getElementById("infoPanel");
+    const title   = document.getElementById("countyName");
     const details = document.getElementById("countyDetails");
 
     title.textContent = `${name} County`;
-
-    if (data && data.occurrence) {
-        details.innerHTML = `
-            <b>Scope:</b> ${data.scope}<br/>
-            <b>Duration:</b> ${data.duration} hrs<br/><br/>
-            include feature justification here<br/><br/>
-
-        `;
-    } else {
-        details.innerHTML = `
-            No outage predicted.<br/><br/>
-            include feature justification here<br/><br/>
-        `;
-    }
+    details.innerHTML = `<div class="panel-loading"><div class="panel-spinner"></div>Loading analysis…</div>`;
 
     panel.classList.remove("hidden");
     panel.classList.add("visible");
+    setTimeout(() => { map.invalidateSize(); }, 300);
 
-    setTimeout(() => {
-        map.invalidateSize();
-    }, 300);
+    fetch(`/api/explain/${fips}`)
+        .then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+        })
+        .then(explainData => renderExplainPanel(details, explainData))
+        .catch(() => {
+            details.innerHTML = `<p style="color:#888">Could not load analysis for this county.</p>`;
+        });
 }
 
-// Populate the left panel with outage predictions
+// ── Sidebar population ─────────────────────────────────────────────────────────
+
 function populateSidebar(countiesData) {
 
     const list = document.getElementById("outageList");
     list.innerHTML = "";
 
-    // Build array with all counties
     const allCounties = countiesData.features.map(feature => {
         const fips = String(feature.properties.GEOID);
         const name = feature.properties.NAME;
         const data = predictions[fips];
-
-        return {
-            fips,
-            name,
-            data,
-            hasOutage: data && data.occurrence
-        };
+        return { fips, name, data, hasOutage: data && data.occurrence };
     });
 
-    // Sort → outages first, then alphabetical
     allCounties.sort((a, b) => {
-
-        // Outages first
         if (a.hasOutage && !b.hasOutage) return -1;
         if (!a.hasOutage && b.hasOutage) return 1;
-
-        // Alphabetical within groups
         return a.name.localeCompare(b.name);
     });
 
-    // Render all counties
     allCounties.forEach(({ fips, name, data, hasOutage }) => {
 
         const row = document.createElement("tr");
         row.className = "outage-row";
+        if (!hasOutage) row.classList.add("no-outage");
 
-        // If no outage is predicted, gray it out
-        if (!hasOutage) {
-            row.classList.add("no-outage");
-        }
-
-        // Determine severity (only for outages)
-        let severity = "yellow";
-        let label = "Minor";
-
+        let severity = "yellow", label = "Minor";
         if (hasOutage) {
-            if (data.scope > 5000) {
-                severity = "red";
-                label = "Severe";
-            } 
-            else if (data.scope > 1000) {
-                severity = "orange";
-                label = "Moderate";
-            }
+            if (data.scope > 5000)      { severity = "red";    label = "Severe"; }
+            else if (data.scope > 1000) { severity = "orange"; label = "Moderate"; }
         }
 
         row.innerHTML = `
             <td>${name} County</td>
-            <td>
-                ${hasOutage 
-                    ? `<span class="badge ${severity}">${label}</span>`
-                    : `<span class="no-outage-text">None</span>`
-                }
-            </td>
-        `;
+            <td>${hasOutage
+                ? `<span class="badge ${severity}">${label}</span>`
+                : `<span class="no-outage-text">None</span>`
+            }</td>`;
 
-        // Helper to find county layer
         function getLayer() {
             let found = null;
             geojson.eachLayer(layer => {
-                if (layer.feature.properties.GEOID === fips) {
-                    found = layer;
-                }
+                if (layer.feature.properties.GEOID === fips) found = layer;
             });
             return found;
         }
 
-        // Hover highlight only if there's an outage)
         row.addEventListener("mouseenter", () => {
-            //if (!hasOutage) return;
-
             const layer = getLayer();
-            if (layer) {
-                layer.setStyle({
-                    weight: 4,
-                    color: "blue"
-                });
-            }
+            if (layer) layer.setStyle({ weight: 4, color: "blue" });
         });
 
         row.addEventListener("mouseleave", () => {
-            //if (!hasOutage) return;
-
             const layer = getLayer();
-            if (layer) {
-                geojson.resetStyle(layer);
-            }
+            if (layer) geojson.resetStyle(layer);
         });
 
-        // Click behavior
         row.addEventListener("click", () => {
-
             const layer = getLayer();
-
             if (layer) {
-
-                map.fitBounds(layer.getBounds(), { padding:[200,200] });
-
-                if (hasOutage) {
-                    layer.setStyle({
-                        weight: 4,
-                        color: "blue"
-                    });
-                }
-
-                showInfoPanel(name, data);
-
-                setTimeout(() => {
-                    geojson.resetStyle(layer);
-                }, 3000);
+                map.fitBounds(layer.getBounds(), { padding: [200, 200] });
+                if (hasOutage) layer.setStyle({ weight: 4, color: "blue" });
+                showInfoPanel(name, fips, data);
+                setTimeout(() => geojson.resetStyle(layer), 3000);
             }
         });
 
@@ -222,46 +308,35 @@ function populateSidebar(countiesData) {
     });
 }
 
-// Fetch data
+// ── Bootstrap ──────────────────────────────────────────────────────────────────
+
 Promise.all([
     fetch("/api/counties").then(r => r.json()),
     fetch("/api/predictions").then(r => r.json())
 ]).then(([countiesData, preds]) => {
-    // Get the outage predictions
     predictions = preds;
 
-    // Extract only the Virginia counties
     const virginiaCounties = {
         type: "FeatureCollection",
         features: countiesData.features.filter(f => f.properties.STATEFP === "51")
     };
 
-    // Add each county to the map
     geojson = L.geoJSON(virginiaCounties, {
         style: styleFunction,
         onEachFeature: onEachFeature
     }).addTo(map);
 
-    // Bring all predicted counties to front
     geojson.eachLayer(layer => {
         const fips = String(layer.feature.properties.GEOID);
-        const data = predictions[fips];
-        if (data && data.occurrence) {
-            layer.bringToFront();
-        }
+        if (predictions[fips] && predictions[fips].occurrence) layer.bringToFront();
     });
-    
+
     populateSidebar(virginiaCounties);
 
 }).catch(err => console.error(err));
 
 document.getElementById("closePanel").addEventListener("click", () => {
     const panel = document.getElementById("infoPanel");
-    const mapDiv = document.getElementById("map");
-
     panel.classList.remove("visible");
-
-    setTimeout(() => {
-        map.invalidateSize();
-    }, 300);
+    setTimeout(() => { map.invalidateSize(); }, 300);
 });
