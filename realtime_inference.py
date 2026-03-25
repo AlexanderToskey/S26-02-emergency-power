@@ -25,6 +25,7 @@ from typing import Optional, Dict, Any, List
 
 import numpy as np
 import pandas as pd
+import torch
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR   = Path(__file__).resolve().parent
@@ -39,6 +40,8 @@ sys.path.insert(0, str(BASE_DIR))
 from outage_occurrence.occurrence_model import OutageOccurrenceModel
 from outage_scope.src.two_stage_model import TwoStageScopeModel
 from outage_duration.src.two_stage_model import TwoStageOutageModel
+
+from anomaly_detection.autoencoder import Autoencoder
 
 # ── WMO weather code → binary flag mapping ────────────────────────────────────
 _CODE_FLAGS = {
@@ -132,6 +135,11 @@ def init() -> bool:
             print("[realtime] SHAP explainer initialized.")
         except Exception as shap_err:
             print(f"[realtime] WARNING: SHAP explainer failed to initialize: {shap_err}")
+
+        try:
+            load_autoencoder()
+        except Exception as e:
+            print(f"[realtime] WARNING: failed to load autoencoder: {e}")
 
     except Exception as e:
         print(f"[realtime] ERROR loading models: {e}")
@@ -557,6 +565,23 @@ def run_inference() -> Dict[str, Any]:
     X_occ = _align_features(occ_df, _occ_model.feature_columns)
     X_occ = X_occ.apply(pd.to_numeric, errors="coerce").fillna(0)
 
+    # ------------------- Autoencoder Integration -------------------
+    if _ae_model is not None:
+        # 1. Normalize features using training mean/std
+        X_occ_np = X_occ.values.astype(float)
+        X_occ_norm = (X_occ_np - _ae_mean) / _ae_std
+
+        # 2. Detect anomalies
+        ae_errors, anomaly_flags = _ae_model.detect(X_occ_norm, _ae_threshold)
+
+        # 3. Add results to occ_df for later merging into results
+        occ_df["ae_error"] = ae_errors
+        occ_df["anomaly_flag"] = anomaly_flags
+
+        n_anomalies = anomaly_flags.sum()
+        print(f"[AE] Detected {n_anomalies} anomalous counties out of {len(X_occ)}")
+    # --------------------------------------------------------------
+
     occ_preds, occ_probs = _occ_model.predict(X_occ)
 
     occ_mask = pd.Series(occ_preds == 1, index=weather_df.index)
@@ -787,3 +812,28 @@ def compute_shap_for_fips(fips: str, explainer_name: str) -> Optional[dict]:
             for name, sv_val in ranked
         ],
     }
+
+# --- Autoencoder loading ---
+
+def load_autoencoder(path=MODELS_DIR / "autoencoder.pt"):
+    """
+    Load the autoencoder to detect anomalous counties
+    Called in init()
+    """
+    global _ae_model, _ae_mean, _ae_std, _ae_threshold
+
+    # Allow the numpy reconstruct function to unpickle properly
+    with torch.serialization.safe_globals([np._core.multiarray._reconstruct]):
+        checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+
+    input_dim = checkpoint["input_dim"]
+    model = Autoencoder(input_dim=input_dim)
+    model.load_state_dict(checkpoint["model_state"])
+    model.eval()
+
+    _ae_model = model
+    _ae_mean = checkpoint["mean"]
+    _ae_std = checkpoint["std"]
+    _ae_threshold = checkpoint["threshold"]
+
+    print(f"[AE] Loaded autoencoder from {path}, threshold={_ae_threshold:.6f}")
