@@ -74,6 +74,16 @@ def predictions():
     return jsonify(data)
 
 
+_EXPLAINER_NAMES = [
+    "_occ_explainer",
+    "_scope_explainer_small",
+    "_scope_explainer_large",
+    "_scope_explainer_classifier",
+    "_duration_explainer_small",
+    "_duration_explainer_large",
+    "_duration_explainer_classifier",
+]
+
 @app.route("/api/explain/<fips>")
 def explain(fips):
     """
@@ -84,6 +94,9 @@ def explain(fips):
           weather: { tmax_c, tmin_c, awnd_ms, wsfg_ms, prcp_mm, ... },
           shap:    { base_value, features: [{name, value, shap}, ...] } }
     """
+
+
+
     pred = realtime_inference.get_cached_predictions().get(fips)
     if pred is None:
         return jsonify({"error": "No prediction cached for this county."}), 404
@@ -92,7 +105,10 @@ def explain(fips):
     if not features:
         return jsonify({"error": "No features cached for this county."}), 404
 
-    shap_data = realtime_inference.compute_shap_for_fips(fips)
+    shap_data = []
+
+    for model in _EXPLAINER_NAMES:
+        shap_data += [realtime_inference.compute_shap_for_fips(fips, explainer_name=model)]
 
     return jsonify({
         "fips":       fips,
@@ -101,7 +117,13 @@ def explain(fips):
         "scope":      pred["scope"],
         "duration":   pred["duration"],
         "weather":    features["weather"],
-        "shap":       shap_data,
+        "_occ_explainer":       shap_data[0],
+        "_scope_explainer_small":       shap_data[1],
+        "_scope_explainer_large":       shap_data[2],
+        "_scope_explainer_classifier":       shap_data[3],
+        "_duration_explainer_small":       shap_data[4],
+        "_duration_explainer_large":       shap_data[5],
+        "_duration_explainer_classifier":       shap_data[6],
     })
 
 
