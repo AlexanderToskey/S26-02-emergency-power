@@ -13,6 +13,7 @@ Public API:
 import sys
 import math
 import json
+import time
 import threading
 import urllib.request
 import urllib.error
@@ -61,8 +62,10 @@ _OPEN_METEO_URL  = "https://api.open-meteo.com/v1/forecast"
 _STORMCENTER_ID  = "9c691bb6-767e-4532-b00e-286ac9adc223"
 _VIEW_ID         = "38b5394c-8bca-4dfd-ac59-b321615446bd"
 
-# Maximum parallel threads for weather fetching
-_WEATHER_WORKERS = 20
+# Maximum parallel threads for weather fetching — keep low to avoid rate-limiting
+_WEATHER_WORKERS = 6
+_WEATHER_RETRIES = 3
+_WEATHER_RETRY_DELAY = 2.0  # seconds between retries
 
 # ── Module-level state ─────────────────────────────────────────────────────────
 _occ_model:   Optional[OutageOccurrenceModel] = None
@@ -211,7 +214,8 @@ def init() -> bool:
 # ── Open-Meteo weather fetching ────────────────────────────────────────────────
 
 def _fetch_one_county_weather(lat: float, lon: float) -> Optional[dict]:
-    """Fetch today's hourly + daily weather for one lat/lon from Open-Meteo."""
+    """Fetch today's hourly + daily weather for one lat/lon from Open-Meteo.
+    Retries up to _WEATHER_RETRIES times with a short delay on failure."""
     params = (
         f"latitude={lat}&longitude={lon}"
         "&hourly=temperature_2m,precipitation,snowfall,snow_depth,"
@@ -221,11 +225,14 @@ def _fetch_one_county_weather(lat: float, lon: float) -> Optional[dict]:
     )
     url = f"{_OPEN_METEO_URL}?{params}"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            return json.loads(r.read())
-    except Exception:
-        return None
+    for attempt in range(_WEATHER_RETRIES):
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return json.loads(r.read())
+        except Exception:
+            if attempt < _WEATHER_RETRIES - 1:
+                time.sleep(_WEATHER_RETRY_DELAY * (attempt + 1))
+    return None
 
 
 def _aggregate_to_county_day(fips: str, data: dict, now: datetime) -> dict:
@@ -312,18 +319,29 @@ def _make_zero_weather_row(fips: str, now: datetime) -> dict:
     return row
 
 
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    return R * 2 * math.asin(math.sqrt(a))
+
+
 def _fetch_weather_all_counties(now: datetime) -> pd.DataFrame:
     """
     Fetch + aggregate weather for all 133 Virginia counties in parallel.
+    On failure, retries are handled in _fetch_one_county_weather. After all
+    fetches, any county that still failed gets its weather filled from the
+    nearest successful county rather than zeros.
     Returns a county-day DataFrame (one row per county).
     """
-    rows: List[dict] = [None] * len(_geo)
+    rows: List[Optional[dict]] = [None] * len(_geo)
+    failed_indices: List[int] = []
 
     def _worker(idx: int, fips: str, lat: float, lon: float):
         data = _fetch_one_county_weather(lat, lon)
         if data is None:
-            print(f"[realtime]   Weather failed for {fips}, using zeros.")
-            return idx, _make_zero_weather_row(fips, now)
+            return idx, None
         return idx, _aggregate_to_county_day(fips, data, now)
 
     with ThreadPoolExecutor(max_workers=_WEATHER_WORKERS) as executor:
@@ -334,6 +352,40 @@ def _fetch_weather_all_counties(now: datetime) -> pd.DataFrame:
         for future in as_completed(futures):
             idx, row_dict = future.result()
             rows[idx] = row_dict
+
+    # Identify failures
+    for i, r in enumerate(rows):
+        if r is None:
+            failed_indices.append(i)
+
+    if failed_indices:
+        print(f"[realtime] Weather failed for {len(failed_indices)} / {len(_geo)} counties after retries.")
+
+        # Build list of successful (lat, lon, row_dict) for nearest-neighbor lookup
+        successful = [
+            (_geo.at[i, "latitude"], _geo.at[i, "longitude"], rows[i])
+            for i in range(len(_geo)) if i not in set(failed_indices) and rows[i] is not None
+        ]
+
+        for i in failed_indices:
+            fips = _geo.at[i, "fips"]
+            lat  = _geo.at[i, "latitude"]
+            lon  = _geo.at[i, "longitude"]
+
+            if successful:
+                # Copy weather from nearest county that succeeded, override fips
+                nearest = min(successful, key=lambda x: _haversine_km(lat, lon, x[0], x[1]))
+                filled = dict(nearest[2])
+                filled["fips_code"] = fips
+                filled["magnitude_missing"] = 1
+                rows[i] = filled
+                print(f"[realtime]   {fips}: weather filled from nearest county (not zeros).")
+            else:
+                # All counties failed — last resort zero row
+                rows[i] = _make_zero_weather_row(fips, now)
+                print(f"[realtime]   {fips}: all fetches failed, using zero row.")
+    else:
+        print(f"[realtime] Weather OK for all {len(_geo)} counties.")
 
     return pd.DataFrame(rows)
 
@@ -436,6 +488,7 @@ def _fetch_kubra_by_fips(cfg: dict) -> Dict[str, float]:
         records = counties.get("file_data", counties)
 
         fips_counts : Dict[str,float]= {}
+        seen_names: Dict[str, str] = {}   # name -> fips, for duplicate detection
         for record in records:
             name = record.get("title", "")
             desc = record.get("desc", {})
@@ -444,12 +497,17 @@ def _fetch_kubra_by_fips(cfg: dict) -> Dict[str, float]:
                 cust_a = float(cust_a.get("val", 0))
             else:
                 cust_a = 0.0
-            
+
             if cust_a <= 0:
                 continue
 
             fips = _name_to_fips(name)
             if fips.isdigit():
+                if name in seen_names and seen_names[name] == fips:
+                    print(f"[realtime] WARNING: duplicate Kubra record for '{name}' "
+                          f"(fips={fips}, adding {cust_a} to existing "
+                          f"{fips_counts.get(fips, 0.0)}) — possible double-count")
+                seen_names[name] = fips
                 fips_counts[fips] = cust_a + fips_counts.get(fips, 0.0)
             else:
                 print(f"[realtime] Unknown region name: {name}")
@@ -682,6 +740,19 @@ def run_inference() -> Dict[str, Any]:
         dur_preds[occ_mask.values] = raw_dur
 
         print("[realtime] Stages 2 & 3 complete.")
+
+        # Scope sanity check — log any county predicted above 2x its historical max
+        for pos, (_, row) in enumerate(event_df.iterrows()):
+            pred_scope = raw_scope[pos]
+            hist_max   = float(row.get("county_max_customers", 0))
+            if hist_max > 0 and pred_scope > hist_max * 2:
+                print(f"[scope-check] fips={row.get('fips_code','')}  "
+                      f"predicted={pred_scope:.0f}  hist_max={hist_max:.0f}  "
+                      f"kubra_live={row.get('initial_customers_affected',0):.0f}  "
+                      f"tmax={row.get('tmax_c',0):.1f}C  "
+                      f"prcp={row.get('prcp_mm',0):.1f}mm  "
+                      f"wind={row.get('wsfg_ms',0):.1f}m/s  "
+                      f"magnitude_missing={int(row.get('magnitude_missing',0))}")
 
 
     # ── Step 7: Build and cache output ────────────────────────────────────────
