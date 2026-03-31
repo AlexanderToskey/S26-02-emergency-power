@@ -111,19 +111,21 @@ def explain(fips):
         shap_data += [realtime_inference.compute_shap_for_fips(fips, explainer_name=model)]
 
     return jsonify({
-        "fips":       fips,
-        "occurrence": pred["occurrence"],
-        "occ_prob":   pred["occ_prob"],
-        "scope":      pred["scope"],
-        "duration":   pred["duration"],
-        "weather":    features["weather"],
-        "_occ_explainer":       shap_data[0],
+        "fips":         fips,
+        "occurrence":   pred["occurrence"],
+        "occ_prob":     pred["occ_prob"],
+        "scope":        pred["scope"],
+        "duration":     pred["duration"],
+        "anomaly_flag": pred.get("anomaly_flag", False),
+        "ae_error":     pred.get("ae_error", 0.0),
+        "weather":      features["weather"],
+        "_occ_explainer":               shap_data[0],
         "_scope_explainer_small":       shap_data[1],
         "_scope_explainer_large":       shap_data[2],
-        "_scope_explainer_classifier":       shap_data[3],
-        "_duration_explainer_small":       shap_data[4],
-        "_duration_explainer_large":       shap_data[5],
-        "_duration_explainer_classifier":       shap_data[6],
+        "_scope_explainer_classifier":  shap_data[3],
+        "_duration_explainer_small":    shap_data[4],
+        "_duration_explainer_large":    shap_data[5],
+        "_duration_explainer_classifier": shap_data[6],
     })
 
 

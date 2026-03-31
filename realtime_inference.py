@@ -89,6 +89,11 @@ _duration_explainer_small=None
 _duration_explainer_large=None
 _duration_explainer_classifier=None
 
+_ae_model     = None   # Autoencoder, loaded in init()
+_ae_mean      = None
+_ae_std       = None
+_ae_threshold = None
+
 _EXPLAINER_NAMES = {}
 
 # ── Initialisation ─────────────────────────────────────────────────────────────
@@ -792,11 +797,15 @@ def run_inference() -> Dict[str, Any]:
         fips = str(weather_df.at[i, "fips_code"])
         occ  = bool(occ_preds[i])
         prob = round(float(occ_probs[i]), 4)
+        anomaly = bool(occ_df.at[i, "anomaly_flag"]) if "anomaly_flag" in occ_df.columns else False
+        ae_err  = round(float(occ_df.at[i, "ae_error"]), 4) if "ae_error" in occ_df.columns else 0.0
         results[fips] = {
-            "occurrence": occ,
-            "scope":      round(float(scope_preds[i]), 1) if occ else 0.0,
-            "duration":   round(float(dur_preds[i]) / 60.0, 2) if occ else 0.0,  # min → hrs
-            "occ_prob":   prob,
+            "occurrence":   occ,
+            "scope":        round(float(scope_preds[i]), 1) if occ else 0.0,
+            "duration":     round(float(dur_preds[i]) / 60.0, 2) if occ else 0.0,  # min → hrs
+            "occ_prob":     prob,
+            "anomaly_flag": anomaly,
+            "ae_error":     ae_err,
         }
 
     ts = now.strftime("%Y-%m-%d %H:%M:%S %Z")

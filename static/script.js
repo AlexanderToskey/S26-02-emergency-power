@@ -23,18 +23,22 @@ function styleFunction(feature) {
 
     const fips = feature.properties.GEOID;
     const countyData = predictions[fips];
+    const anomalous = countyData && countyData.anomaly_flag;
 
     if (!countyData || !countyData.occurrence) {
-        return { color: "#999", weight: 1, fillOpacity: 0.3 };
+        return { color: anomalous ? "#7c3aed" : "#999", weight: anomalous ? 2 : 1, fillOpacity: 0.3 };
     }
 
+    const borderColor = anomalous ? "#7c3aed" : "black";
+    const borderWeight = anomalous ? 2.5 : 1;
+
     if (countyData.scope > 5000)
-        return { fillColor: "red", weight: 1, color: "black", fillOpacity: 0.7 };
+        return { fillColor: "red", weight: borderWeight, color: borderColor, fillOpacity: 0.7 };
 
     if (countyData.scope > 1000)
-        return { fillColor: "orange", weight: 1, color: "black", fillOpacity: 0.6 };
+        return { fillColor: "orange", weight: borderWeight, color: borderColor, fillOpacity: 0.6 };
 
-    return { fillColor: "yellow", weight: 1, color: "black", fillOpacity: 0.6 };
+    return { fillColor: "yellow", weight: borderWeight, color: borderColor, fillOpacity: 0.6 };
 }
 
 // Tooltip behavior
@@ -47,6 +51,7 @@ function onEachFeature(feature, layer) {
     layer.on({
         mouseover: function () {
             let props;
+            const anomalyNote = (data && data.anomaly_flag) ? "<br/>⚠ Unusual weather pattern" : "";
 
             if (data && data.occurrence) {
                 props = `
@@ -54,9 +59,10 @@ function onEachFeature(feature, layer) {
                     Outage Predicted<br/>
                     Projected # of Affected Customers: ${data.scope}<br/>
                     Projected Outage Duration: ${data.duration} hrs
+                    ${anomalyNote}
                 `;
             } else {
-                props = `<b>${displayName}</b><br/>No Outage Predicted`;
+                props = `<b>${displayName}</b><br/>No Outage Predicted${anomalyNote}`;
             }
 
             layer.bindTooltip(props).openTooltip();
@@ -238,7 +244,13 @@ function renderExplainPanel(container, explainData) {
     //     shapHtml = `<div class="panel-section"><em>SHAP explainer unavailable.</em></div>`;
     // }
 
-    container.innerHTML = probHtml + predHtml + wxHtml + tabsHtml;// + shapHtml;
+    // ── Anomaly banner (only shown when autoencoder flagged unusual pattern) ──
+    const anomalyHtml = explainData.anomaly_flag ? `
+        <div class="anomaly-banner">
+            ⚠ Unusual weather pattern detected (reconstruction error: ${explainData.ae_error != null ? explainData.ae_error.toFixed(4) : "N/A"})
+        </div>` : "";
+
+    container.innerHTML = anomalyHtml + probHtml + predHtml + wxHtml + tabsHtml;
 
     const updateBars = (tabName) => {
         const target = document.getElementById("shap-list-container");

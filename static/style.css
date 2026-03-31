@@ -681,3 +681,17 @@ body {
 .model-tab-content {
     min-height: 20px;
 }
+
+/* ── Anomaly detection banner ───────────────────────────────────────────────── */
+
+.anomaly-banner {
+    background: #f5f3ff;
+    border: 1px solid #7c3aed;
+    border-left: 4px solid #7c3aed;
+    color: #4c1d95;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 14px;
+}
