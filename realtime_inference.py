@@ -94,6 +94,9 @@ _ae_mean      = None
 _ae_std       = None
 _ae_threshold = None
 
+_cached_forecast: Dict[str, Any] = {}  # date_str -> {fips -> prediction}
+_forecast_lock = threading.Lock()
+
 _EXPLAINER_NAMES = {}
 
 # ── Initialisation ─────────────────────────────────────────────────────────────
@@ -532,6 +535,57 @@ def _fetch_kubra_by_fips(cfg: dict) -> Dict[str, float]:
         return {}
 
 
+# ── Event flag synthesis ───────────────────────────────────────────────────────
+
+def _compute_event_flags(row) -> dict:
+    """Map aggregated weather features to NOAA storm event type binary flags."""
+    prcp    = row.get("prcp_mm",  0.0)
+    snow    = row.get("snow_mm",  0.0)
+    snwd    = row.get("snwd_mm",  0.0)
+    wind    = row.get("awnd_ms",  0.0)
+    gust    = row.get("wsfg_ms",  0.0)
+    tmin    = row.get("tmin_c",   0.0)
+    fog     = row.get("wt_fog",   0)
+    thunder = row.get("wt_thunder", 0)
+    ice     = row.get("wt_ice",   0)
+    frzrn   = row.get("wt_freezing_rain", 0)
+    bsnow   = row.get("wt_blowing_snow",  0)
+    wsnow   = row.get("wt_snow",  0)
+
+    flags = {
+        "event_Thunderstorm Wind":      int(thunder and gust > 13),
+        "event_Lightning":              int(thunder),
+        "event_Hail":                   int(thunder and gust > 18),
+        "event_High Wind":              int(gust > 25),
+        "event_Strong Wind":            int(wind > 13 and gust <= 25),
+        "event_Dense Fog":              int(fog),
+        "event_Heavy Rain":             int(prcp > 25),
+        "event_Flash Flood":            int(prcp > 50),
+        "event_Flood":                  int(prcp > 30),
+        "event_Heavy Snow":             int(wsnow and snow > 100),
+        "event_Blizzard":               int(bsnow and wind > 15),
+        "event_Winter Storm":           int((snow > 50 or snwd > 50) and tmin < 0),
+        "event_Winter Weather":         int(wsnow and snow <= 100),
+        "event_Ice Storm":              int(ice or frzrn),
+        "event_Frost/Freeze":           int(tmin < 0 and prcp == 0),
+        "event_Avalanche":              0,
+        "event_Coastal Flood":          0,
+        "event_Cold/Wind Chill":        int(tmin < -10),
+        "event_Debris Flow":            0,
+        "event_Drought":                0,
+        "event_Excessive Heat":         int(row.get("tmax_c", 0) > 38),
+        "event_Extreme Cold/Wind Chill":int(tmin < -20),
+        "event_Funnel Cloud":           0,
+        "event_Heat":                   int(row.get("tmax_c", 0) > 32),
+        "event_Rip Current":            0,
+        "event_Tornado":                0,
+        "event_Tropical Storm":         int(gust > 33 and prcp > 25),
+        "event_Wildfire":               0,
+    }
+    flags["event_None"] = int(not any(flags.values()))
+    return flags
+
+
 # ── Feature alignment ──────────────────────────────────────────────────────────
 
 def _align_features(df: pd.DataFrame, feature_names: List[str]) -> pd.DataFrame:
@@ -676,58 +730,7 @@ def run_inference() -> Dict[str, Any]:
             event_df["initial_customers_affected"] / max_cust
         ).clip(upper=1.0)
 
-        # Synthesize event_* columns from weather data.
-        # These map to the NOAA storm event types the models were trained on.
-        def _event_flags(row) -> dict:
-            prcp  = row.get("prcp_mm",  0.0)
-            snow  = row.get("snow_mm",  0.0)
-            snwd  = row.get("snwd_mm",  0.0)
-            wind  = row.get("awnd_ms",  0.0)
-            gust  = row.get("wsfg_ms",  0.0)
-            tmin  = row.get("tmin_c",   0.0)
-            fog   = row.get("wt_fog",   0)
-            thunder = row.get("wt_thunder", 0)
-            ice   = row.get("wt_ice",   0)
-            frzrn = row.get("wt_freezing_rain", 0)
-            bsnow = row.get("wt_blowing_snow",  0)
-            wsnow = row.get("wt_snow",  0)
-
-            flags = {
-                "event_Thunderstorm Wind": int(thunder and gust > 13),
-                "event_Lightning":         int(thunder),
-                "event_Hail":              int(thunder and gust > 18),
-                "event_High Wind":         int(gust > 25),
-                "event_Strong Wind":       int(wind > 13 and gust <= 25),
-                "event_Dense Fog":         int(fog),
-                "event_Heavy Rain":        int(prcp > 25),
-                "event_Flash Flood":       int(prcp > 50),
-                "event_Flood":             int(prcp > 30),
-                "event_Heavy Snow":        int(wsnow and snow > 100),
-                "event_Blizzard":          int(bsnow and wind > 15),
-                "event_Winter Storm":      int((snow > 50 or snwd > 50) and tmin < 0),
-                "event_Winter Weather":    int(wsnow and snow <= 100),
-                "event_Ice Storm":         int(ice or frzrn),
-                "event_Frost/Freeze":      int(tmin < 0 and prcp == 0),
-                # remaining event types have no reliable real-time proxy → 0
-                "event_Avalanche":         0,
-                "event_Coastal Flood":     0,
-                "event_Cold/Wind Chill":   int(tmin < -10),
-                "event_Debris Flow":       0,
-                "event_Drought":           0,
-                "event_Excessive Heat":    int(row.get("tmax_c", 0) > 38),
-                "event_Extreme Cold/Wind Chill": int(tmin < -20),
-                "event_Funnel Cloud":      0,
-                "event_Heat":              int(row.get("tmax_c", 0) > 32),
-                "event_Rip Current":       0,
-                "event_Tornado":           0,
-                "event_Tropical Storm":    int(gust > 33 and prcp > 25),
-                "event_Wildfire":          0,
-            }
-            any_event = any(flags.values())
-            flags["event_None"] = int(not any_event)
-            return flags
-
-        event_flags_df = event_df.apply(_event_flags, axis=1, result_type="expand")
+        event_flags_df = event_df.apply(_compute_event_flags, axis=1, result_type="expand")
         event_df = pd.concat([event_df, event_flags_df], axis=1)
 
         # Convert fips to numeric for XGBoost
@@ -917,3 +920,235 @@ def load_autoencoder(path=MODELS_DIR / "autoencoder.pt"):
     _ae_threshold = checkpoint["threshold"]
 
     print(f"[AE] Loaded autoencoder from {path}, threshold={_ae_threshold:.6f}")
+
+
+# ── 7-day forecast ─────────────────────────────────────────────────────────────
+
+def _fetch_one_county_forecast(lat: float, lon: float, days: int = 7) -> Optional[dict]:
+    """Fetch a multi-day hourly + daily forecast for one lat/lon from Open-Meteo."""
+    params = (
+        f"latitude={lat}&longitude={lon}"
+        "&hourly=temperature_2m,precipitation,snowfall,snow_depth,"
+        "windspeed_10m,windgusts_10m,weathercode"
+        "&daily=temperature_2m_max,temperature_2m_min"
+        f"&forecast_days={days}&timezone=America%2FNew_York"
+    )
+    url = f"{_OPEN_METEO_URL}?{params}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    for attempt in range(_WEATHER_RETRIES):
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return json.loads(r.read())
+        except Exception:
+            if attempt < _WEATHER_RETRIES - 1:
+                time.sleep(_WEATHER_RETRY_DELAY)
+    return None
+
+
+def _aggregate_forecast_days(fips: str, data: dict) -> List[dict]:
+    """
+    Slice a multi-day Open-Meteo response into one feature row per day.
+    Returns a list of dicts ordered by day (index 0 = today).
+    """
+    h      = data["hourly"]
+    d      = data["daily"]
+    n_days = len(d["time"])
+    rows   = []
+
+    for day_idx in range(n_days):
+        start = day_idx * 24
+        end   = start + 24
+
+        precip_vals  = [v or 0.0 for v in h["precipitation"][start:end]]
+        snow_vals    = [(v or 0.0) * 10   for v in h["snowfall"][start:end]]
+        snwd_vals    = [(v or 0.0) * 1000 for v in h["snow_depth"][start:end]]
+        wind_ms_vals = [(v or 0.0) / 3.6  for v in h["windspeed_10m"][start:end]]
+        gust_ms_vals = [(v or 0.0) / 3.6  for v in h["windgusts_10m"][start:end]]
+        codes        = [int(v or 0)        for v in h["weathercode"][start:end]]
+
+        prcp_mm = sum(precip_vals)
+        snow_mm = sum(snow_vals)
+        snwd_mm = max(snwd_vals) if snwd_vals else 0.0
+        awnd_ms = sum(wind_ms_vals) / max(len(wind_ms_vals), 1)
+        wsfg_ms = max(gust_ms_vals) if gust_ms_vals else 0.0
+        tmax_c  = d["temperature_2m_max"][day_idx] or 0.0
+        tmin_c  = d["temperature_2m_min"][day_idx] or 0.0
+
+        from datetime import datetime as _dt
+        dt = _dt.strptime(d["time"][day_idx], "%Y-%m-%d")
+        flags = {
+            flag: int(any(c in code_set for c in codes))
+            for flag, code_set in _CODE_FLAGS.items()
+        }
+
+        row = {
+            "fips_code":         fips,
+            "date":              d["time"][day_idx],
+            "year":              dt.year,
+            "month":             dt.month,
+            "day":               dt.day,
+            "hour":              12,
+            "dayofweek":         dt.weekday(),
+            "dayofyear":         dt.timetuple().tm_yday,
+            "is_weekend":        int(dt.weekday() >= 5),
+            "prcp_mm":           round(prcp_mm, 3),
+            "snow_mm":           round(snow_mm, 3),
+            "snwd_mm":           round(snwd_mm, 3),
+            "tmax_c":            tmax_c,
+            "tmin_c":            tmin_c,
+            "awnd_ms":           round(awnd_ms, 3),
+            "wsfg_ms":           round(wsfg_ms, 3),
+            "has_weather_event": int(any(c >= 95 for c in codes)),
+            "max_magnitude":     round(max(prcp_mm, awnd_ms), 3),
+            "magnitude_missing": 0,
+        }
+        row.update(flags)
+        rows.append(row)
+
+    return rows
+
+
+def run_forecast(days: int = 7) -> Dict[str, Any]:
+    """
+    Fetch a multi-day weather forecast for all 133 counties and run the
+    occurrence + scope + duration cascade for each day.
+
+    Returns:
+        { date_str: { fips: {occurrence, scope, duration, occ_prob} } }
+    No live Kubra data is used — future outage counts are unknown, so
+    initial_customers_affected and related features default to 0.
+    """
+    global _cached_forecast
+
+    if _occ_model is None:
+        print("[forecast] Models not loaded.")
+        return {}
+
+    print(f"\n[forecast] === Forecast run ({days} days) ===")
+
+    # Fetch multi-day weather in parallel (same worker limit as realtime)
+    all_county_rows: List[Optional[List[dict]]] = [None] * len(_geo)
+
+    def _worker(idx: int, fips: str, lat: float, lon: float):
+        data = _fetch_one_county_forecast(lat, lon, days=days)
+        if data is None:
+            return idx, None
+        return idx, _aggregate_forecast_days(fips, data)
+
+    with ThreadPoolExecutor(max_workers=_WEATHER_WORKERS) as executor:
+        futures = {
+            executor.submit(_worker, i, row["fips"], row["latitude"], row["longitude"]): i
+            for i, row in _geo.iterrows()
+        }
+        for future in as_completed(futures):
+            idx, rows = future.result()
+            all_county_rows[idx] = rows
+
+    # Get date labels from any successful fetch
+    date_keys: Optional[List[str]] = None
+    for r in all_county_rows:
+        if r is not None:
+            date_keys = [row["date"] for row in r]
+            break
+    if date_keys is None:
+        print("[forecast] All weather fetches failed.")
+        return {}
+
+    n_failed = sum(1 for r in all_county_rows if r is None)
+    if n_failed:
+        print(f"[forecast] {n_failed} counties failed — filling from nearest neighbor.")
+        successful_idx = [i for i, r in enumerate(all_county_rows) if r is not None]
+        for i, rows in enumerate(all_county_rows):
+            if rows is not None:
+                continue
+            lat = _geo.at[i, "latitude"]
+            lon = _geo.at[i, "longitude"]
+            fips = _geo.at[i, "fips"]
+            nearest_idx = min(
+                successful_idx,
+                key=lambda j: _haversine_km(lat, lon, _geo.at[j, "latitude"], _geo.at[j, "longitude"])
+            )
+            filled = []
+            for day_row in all_county_rows[nearest_idx]:
+                d = dict(day_row)
+                d["fips_code"] = fips
+                d["magnitude_missing"] = 1
+                filled.append(d)
+            all_county_rows[i] = filled
+
+    results_by_date: Dict[str, Any] = {}
+
+    for day_idx, date_str in enumerate(date_keys):
+        day_rows = [all_county_rows[i][day_idx] for i in range(len(_geo))]
+        day_df   = pd.DataFrame(day_rows).reset_index(drop=True)
+
+        # Merge county historical stats
+        if len(_county_stats) > 0:
+            stats_cols = [c for c in _county_stats.columns if c != "fips_code"]
+            day_df = day_df.merge(
+                _county_stats[["fips_code"] + stats_cols], on="fips_code", how="left"
+            )
+        for col in ["county_median_duration", "county_long_rate",
+                    "county_median_scope", "county_large_outage_rate", "county_max_customers"]:
+            if col not in day_df.columns:
+                day_df[col] = 0.0
+        day_df = day_df.fillna(0.0).reset_index(drop=True)
+
+        # Stage 1: Occurrence
+        occ_df = day_df.copy()
+        occ_df["fips_code"] = pd.to_numeric(occ_df["fips_code"], errors="coerce")
+        X_occ = _align_features(occ_df, _occ_model.feature_columns)
+        X_occ = X_occ.apply(pd.to_numeric, errors="coerce").fillna(0)
+        occ_preds, occ_probs = _occ_model.predict(X_occ)
+        occ_mask = pd.Series(occ_preds == 1, index=day_df.index)
+
+        scope_preds = np.zeros(len(day_df))
+        dur_preds   = np.zeros(len(day_df))
+
+        if occ_mask.sum() > 0:
+            event_df = day_df.loc[occ_mask].copy().reset_index(drop=True)
+
+            # No live Kubra data for future days
+            event_df["initial_customers_affected"]   = 0.0
+            event_df["delta_customers_affected_15m"] = 0.0
+            event_df["pct_growth_15m"]               = 0.0
+            event_df["initial_impact_density"]       = 0.0
+
+            event_flags_df = event_df.apply(_compute_event_flags, axis=1, result_type="expand")
+            event_df = pd.concat([event_df, event_flags_df], axis=1)
+            event_df["fips_code"] = pd.to_numeric(event_df["fips_code"], errors="coerce")
+            event_df = event_df.apply(pd.to_numeric, errors="coerce").fillna(0)
+
+            X_scope = _align_features(event_df.copy(), _scope_model.featureNames)
+            scope_preds[occ_mask.values] = _scope_model.predict(X_scope)
+
+            X_dur = _align_features(event_df.copy(), _dur_model.featureNames)
+            dur_preds[occ_mask.values] = _dur_model.predict(X_dur)
+
+        day_results: Dict[str, Any] = {}
+        for i in day_df.index:
+            fips = str(day_df.at[i, "fips_code"])
+            occ  = bool(occ_preds[i])
+            prob = round(float(occ_probs[i]), 4)
+            day_results[fips] = {
+                "occurrence": occ,
+                "scope":      round(float(scope_preds[i]), 1) if occ else 0.0,
+                "duration":   round(float(dur_preds[i]) / 60.0, 2) if occ else 0.0,
+                "occ_prob":   prob,
+            }
+
+        n_out = sum(1 for v in day_results.values() if v["occurrence"])
+        print(f"[forecast]   {date_str}: {n_out} / {len(day_df)} counties flagged")
+        results_by_date[date_str] = day_results
+
+    with _forecast_lock:
+        _cached_forecast = results_by_date
+
+    print("[forecast] Done.\n")
+    return results_by_date
+
+
+def get_cached_forecast() -> Dict[str, Any]:
+    """Return the most recently cached forecast (thread-safe)."""
+    with _forecast_lock:
+        return dict(_cached_forecast)

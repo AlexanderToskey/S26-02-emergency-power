@@ -11,15 +11,22 @@ app = Flask(__name__)
 #  Startup: load models and run first inference
 
 def _background_refresh(interval_seconds: int = 900):
-    """
-    Background thread: re-runs the full inference pipeline every `interval_seconds`
-    (default 15 minutes) so predictions stay current without blocking API requests.
-    """
+    """Re-runs live inference every 15 minutes."""
     while True:
         try:
             realtime_inference.run_inference()
         except Exception as e:
             print(f"[app] Background inference error: {e}")
+        time.sleep(interval_seconds)
+
+
+def _background_forecast(interval_seconds: int = 3600):
+    """Re-runs 7-day forecast every hour."""
+    while True:
+        try:
+            realtime_inference.run_forecast(days=7)
+        except Exception as e:
+            print(f"[app] Background forecast error: {e}")
         time.sleep(interval_seconds)
 
 
@@ -37,10 +44,20 @@ def _startup():
     except Exception as e:
         print(f"[app] Initial inference failed: {e}")
 
-    # Background refresh thread (daemon=True so it dies with the server)
+    # Background live-inference thread (every 15 min)
     t = threading.Thread(target=_background_refresh, daemon=True)
     t.start()
     print("[app] Background refresh thread started (interval: 15 min).")
+
+    # Initial forecast run then hourly refresh thread
+    print("[app] Running initial 7-day forecast ...")
+    try:
+        realtime_inference.run_forecast(days=7)
+    except Exception as e:
+        print(f"[app] Initial forecast failed: {e}")
+    tf = threading.Thread(target=_background_forecast, daemon=True)
+    tf.start()
+    print("[app] Background forecast thread started (interval: 60 min).")
 
 
 # Routes
@@ -127,6 +144,18 @@ def explain(fips):
         "_duration_explainer_large":    shap_data[5],
         "_duration_explainer_classifier": shap_data[6],
     })
+
+
+@app.route("/api/forecast")
+def forecast():
+    """
+    Returns 7-day county-level outage forecasts.
+    Shape: { date_str: { fips: {occurrence, scope, duration, occ_prob} } }
+    """
+    data = realtime_inference.get_cached_forecast()
+    if not data:
+        return jsonify({"error": "Forecast not yet available. Try again shortly."}), 503
+    return jsonify(data)
 
 
 @app.route("/api/status")

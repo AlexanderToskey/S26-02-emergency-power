@@ -7,6 +7,8 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 let predictions = {};
 let geojson;
+let forecastData = {};   // { date_str: { fips: {...} } }
+let activeDateLabel = "Live";
 
 function formatCountyName(name, fips) {
     const countyCode = parseInt(fips.slice(2));
@@ -388,13 +390,74 @@ function populateSidebar(countiesData) {
     });
 }
 
+// ── Day selector ───────────────────────────────────────────────────────────────
+
+function formatDateLabel(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function switchToDate(dateStr, virginiaCounties) {
+    predictions = forecastData[dateStr] || {};
+    activeDateLabel = formatDateLabel(dateStr);
+    geojson.setStyle(styleFunction);
+    geojson.eachLayer(layer => {
+        const fips = String(layer.feature.properties.GEOID);
+        if (predictions[fips] && predictions[fips].occurrence) layer.bringToFront();
+    });
+    populateSidebar(virginiaCounties);
+    document.querySelectorAll(".day-btn").forEach(b => b.classList.remove("active"));
+    document.querySelector(`.day-btn[data-date="${dateStr}"]`)?.classList.add("active");
+}
+
+function switchToLive(livePreds, virginiaCounties) {
+    predictions = livePreds;
+    activeDateLabel = "Live";
+    geojson.setStyle(styleFunction);
+    geojson.eachLayer(layer => {
+        const fips = String(layer.feature.properties.GEOID);
+        if (predictions[fips] && predictions[fips].occurrence) layer.bringToFront();
+    });
+    populateSidebar(virginiaCounties);
+    document.querySelectorAll(".day-btn").forEach(b => b.classList.remove("active"));
+    document.getElementById("btn-live")?.classList.add("active");
+}
+
+function buildDaySelector(virginiaCounties, livePreds) {
+    const bar = document.getElementById("day-selector");
+    if (!bar) return;
+    bar.innerHTML = "";
+
+    // Live button
+    const liveBtn = document.createElement("button");
+    liveBtn.id = "btn-live";
+    liveBtn.className = "day-btn active";
+    liveBtn.textContent = "Live";
+    liveBtn.addEventListener("click", () => switchToLive(livePreds, virginiaCounties));
+    bar.appendChild(liveBtn);
+
+    // One button per forecast day (skip today — same as Live)
+    const dates = Object.keys(forecastData).sort();
+    dates.forEach((dateStr, i) => {
+        const btn = document.createElement("button");
+        btn.className = "day-btn";
+        btn.dataset.date = dateStr;
+        btn.textContent = i === 0 ? "Today" : `+${i}d`;
+        btn.title = formatDateLabel(dateStr);
+        btn.addEventListener("click", () => switchToDate(dateStr, virginiaCounties));
+        bar.appendChild(btn);
+    });
+}
+
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 
 Promise.all([
     fetch("/api/counties").then(r => r.json()),
-    fetch("/api/predictions").then(r => r.json())
-]).then(([countiesData, preds]) => {
-    predictions = preds;
+    fetch("/api/predictions").then(r => r.json()),
+    fetch("/api/forecast").then(r => r.ok ? r.json() : {}).catch(() => ({})),
+]).then(([countiesData, preds, forecast]) => {
+    predictions   = preds;
+    forecastData  = forecast;
 
     const virginiaCounties = {
         type: "FeatureCollection",
@@ -412,6 +475,7 @@ Promise.all([
     });
 
     populateSidebar(virginiaCounties);
+    buildDaySelector(virginiaCounties, preds);
 
 }).catch(err => console.error(err));
 
