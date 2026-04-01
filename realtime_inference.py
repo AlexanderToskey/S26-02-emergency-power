@@ -607,6 +607,30 @@ def _align_features(df: pd.DataFrame, feature_names: List[str]) -> pd.DataFrame:
             df[col] = 0
     return df[feature_names]
 
+# ── Tier 1 Anomaly Detection ──────────────────────────────────────────────────────────
+
+def _anomaly_detection_tier1(df: pd.DataFrame) -> pd.Series:
+    """
+    Given a dataframe, look for any anamolous values for weather data (outside
+    of certain z-scores, etc.). 
+    
+    Return a series with each county that has an anomaly
+    """
+
+    anomalies = pd.Series(False, index=df.index)
+
+    outlier_mask = pd.Series((df["prcp_mm"] > 500) | (df["tmax_c"] > 60) | (df["tmin_c"] < -40) 
+                             | (df["awnd_ms"] > 25) | (df["wsfg_ms"] > 80) | (df["awnd_ms"] < 0) | (df["wsfg_ms"] < 0))
+    
+    anomalies = anomalies | outlier_mask
+
+    for col in ["prcp_mm","tmax_c","tmin_c","awnd_ms","prcp_mm", "snow_mm"]:
+        mean = df[col].mean()
+        std = df[col].std()
+        if std > 0:
+            z = np.abs((df[col] - mean)/std)
+            anomalies = anomalies | (z > 4.0)
+    return anomalies
 
 # ── Main inference function ────────────────────────────────────────────────────
 
@@ -680,6 +704,13 @@ def run_inference() -> Dict[str, Any]:
             weather_df[col] = 0.0
 
     weather_df = weather_df.fillna(0.0).reset_index(drop=True)
+
+    # ── Tier 1 Anomaly Detection: Statistics ───────────────────────────────────
+    print("[realtime] Running Tier 1 Anomaly Detection (Statistical weather checks)...")
+    anomalies = _anomaly_detection_tier1(weather_df)
+    num_anomalies = anomalies.sum()
+    if num_anomalies > 0:
+        print(f"[realtime] [WARNING] Anomalous data detected in {anomalies.sum()} counties (tier1)")
 
     # ── Step 4: Stage 1 — Occurrence ──────────────────────────────────────────
     print("[realtime] Running Stage 1 (Occurrence) ...")
