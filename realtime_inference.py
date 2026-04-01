@@ -67,6 +67,11 @@ _WEATHER_WORKERS = 6
 _WEATHER_RETRIES = 3
 _WEATHER_RETRY_DELAY = 2.0  # seconds between retries
 
+# Minimum predicted customers to surface an occurrence as a real outage.
+# The occurrence model was trained on customers_out > 0 (any outage, even 1 customer),
+# so nearly every county gets flagged on calm days. Filtering by scope removes noise.
+_MIN_SCOPE_CUSTOMERS = 50
+
 # ── Module-level state ─────────────────────────────────────────────────────────
 _occ_model:   Optional[OutageOccurrenceModel] = None
 _scope_model: Optional[TwoStageScopeModel]    = None
@@ -443,11 +448,13 @@ def init_fips_cache(file_path: Path):
             fips = str(row["fips"])
             raw_name = row["county_name"].lower().replace(", virginia","").strip()
 
-            aliases = []
-
-            aliases.append(raw_name)
-            # aliases.append(raw_name.replace(", virginia","").strip())
-            aliases.append(raw_name.replace(" county","").replace(" city","").strip())
+            aliases = [raw_name]
+            # Strip only the FINAL word if it is "county" or "city" so that
+            # compound names like "James City County" → "James City" not "James"
+            for suffix in (" county", " city"):
+                if raw_name.endswith(suffix):
+                    aliases.append(raw_name[: -len(suffix)].strip())
+                    break
 
             for a in aliases:
                 if a not in _FIPS_CACHE or "county" in raw_name:
@@ -800,12 +807,17 @@ def run_inference() -> Dict[str, Any]:
         fips = str(weather_df.at[i, "fips_code"])
         occ  = bool(occ_preds[i])
         prob = round(float(occ_probs[i]), 4)
-        anomaly = bool(occ_df.at[i, "anomaly_flag"]) if "anomaly_flag" in occ_df.columns else False
-        ae_err  = round(float(occ_df.at[i, "ae_error"]), 4) if "ae_error" in occ_df.columns else 0.0
+        anomaly    = bool(occ_df.at[i, "anomaly_flag"]) if "anomaly_flag" in occ_df.columns else False
+        ae_err     = round(float(occ_df.at[i, "ae_error"]), 4) if "ae_error" in occ_df.columns else 0.0
+        raw_scope  = round(float(scope_preds[i]), 1) if occ else 0.0
+        raw_dur    = round(float(dur_preds[i]) / 60.0, 2) if occ else 0.0
+        # Suppress low-scope predictions — occurrence model flags ~94% of counties because
+        # it was trained on customers_out > 0 (any outage). Filter to meaningful events.
+        significant = occ and raw_scope >= _MIN_SCOPE_CUSTOMERS
         results[fips] = {
-            "occurrence":   occ,
-            "scope":        round(float(scope_preds[i]), 1) if occ else 0.0,
-            "duration":     round(float(dur_preds[i]) / 60.0, 2) if occ else 0.0,  # min → hrs
+            "occurrence":   significant,
+            "scope":        raw_scope if significant else 0.0,
+            "duration":     raw_dur   if significant else 0.0,
             "occ_prob":     prob,
             "anomaly_flag": anomaly,
             "ae_error":     ae_err,
@@ -1127,13 +1139,16 @@ def run_forecast(days: int = 7) -> Dict[str, Any]:
 
         day_results: Dict[str, Any] = {}
         for i in day_df.index:
-            fips = str(day_df.at[i, "fips_code"])
-            occ  = bool(occ_preds[i])
-            prob = round(float(occ_probs[i]), 4)
+            fips      = str(day_df.at[i, "fips_code"])
+            occ       = bool(occ_preds[i])
+            prob      = round(float(occ_probs[i]), 4)
+            raw_scope = round(float(scope_preds[i]), 1) if occ else 0.0
+            raw_dur   = round(float(dur_preds[i]) / 60.0, 2) if occ else 0.0
+            significant = occ and raw_scope >= _MIN_SCOPE_CUSTOMERS
             day_results[fips] = {
-                "occurrence": occ,
-                "scope":      round(float(scope_preds[i]), 1) if occ else 0.0,
-                "duration":   round(float(dur_preds[i]) / 60.0, 2) if occ else 0.0,
+                "occurrence": significant,
+                "scope":      raw_scope if significant else 0.0,
+                "duration":   raw_dur   if significant else 0.0,
                 "occ_prob":   prob,
             }
 
