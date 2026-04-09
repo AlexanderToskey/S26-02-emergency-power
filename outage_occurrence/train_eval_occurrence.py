@@ -16,7 +16,7 @@ from occurrence_explainer_model import OutageOccurrenceExplainer
 
 def main():
     # Get the base directory and get the data and model directories
-    BASE_DIR = Path(__file__).resolve().parent
+    BASE_DIR = Path(__file__).resolve().parent.parent
     data_dir = BASE_DIR / "data"
     model_dir = BASE_DIR / "models"
 
@@ -65,6 +65,22 @@ def main():
         print("[preprocessor] Dropping 'year' from features to avoid single-use leakage...")
         X = X.drop(columns=["year"])
 
+
+    print("\nExporting a small sample of the preprocessed data...")
+    
+    # Recombine features (X) and target (y) so they are in one file
+    sample_export = X.copy()
+    sample_export['target_occurrence'] = y
+    
+    # Grab a random sample of 100 rows
+    small_sample = sample_export.sample(n=100, random_state=42)
+    
+    # Save it to the data directory
+    sample_path = data_dir / "preprocessed_sample_occurrence.csv"
+    small_sample.to_csv(sample_path, index=False)
+    print(f"Saved 100 sample rows to {sample_path}")
+    # ---------------------------------------
+
     # ------------------------------------------------------------------
     # STEP 6: Train/Test split
     # ------------------------------------------------------------------
@@ -76,6 +92,8 @@ def main():
         random_state=42,
         stratify=y,  # important for imbalanced data
     )
+
+    
 
     # ------------------------------------------------------------------
     # STEP 7: Train model
@@ -100,12 +118,12 @@ def main():
     # ------------------------------------------------------------------
     # STEP 8.5: Save Model to Central Directory
     # ------------------------------------------------------------------
-    print("\nSaving occurrence model...")
-    #model_dir = Path("models")
-    model_dir.mkdir(parents=True, exist_ok=True)
+    # print("\nSaving occurrence model...")
+    # #model_dir = Path("models")
+    # model_dir.mkdir(parents=True, exist_ok=True)
     
-    # Assuming OutageOccurrenceModel has a save() method
-    model.save(model_dir / "occurrence_model.joblib")
+    # # Assuming OutageOccurrenceModel has a save() method
+    # model.save(model_dir / "occurrence_model.joblib")
 
     # ------------------------------------------------------------------
     # STEP 9: Feature importance
@@ -120,26 +138,26 @@ def main():
     # STEP 10: SHAP Explainer
     # ------------------------------------------------------------------
     # Uncomment if explainer supports classification
-    print("\nGenerating SHAP Explanations...")
-    try:
-        explainer = OutageOccurrenceExplainer(model, X_train)
-        explainer.plotSummary(X_test, path="shap_summary_occurrence.png")
-        print("SHAP summary plot saved successfully.")
+    # print("\nGenerating SHAP Explanations...")
+    # try:
+    #     explainer = OutageOccurrenceExplainer(model, X_train)
+    #     explainer.plotSummary(X_test, path="shap_summary_occurrence.png")
+    #     print("SHAP summary plot saved successfully.")
 
-        shap_values = explainer.computeShapValues(X.head(10))
-        print("SHAP values shape:", shap_values.shape)
+    #     shap_values = explainer.computeShapValues(X.head(10))
+    #     print("SHAP values shape:", shap_values.shape)
     
-        explainer.plotFeatureImportance(X.head(200), path="shap_importance.png")
-        #explainer.plotFeatureImportance(X.head(200))
-        print("Feature importance plot saved as shap_importance.png")
+    #     explainer.plotFeatureImportance(X.head(200), path="shap_importance.png")
+    #     #explainer.plotFeatureImportance(X.head(200))
+    #     print("Feature importance plot saved as shap_importance.png")
         
-        importance_dict = explainer.getFeatureImportanceDict(X.head(500))
-        print("\nTop Feature Importances:")
-        for feature, score in list(importance_dict.items())[:5]:
-            print(f"{feature}: {score:.4f}")
+    #     importance_dict = explainer.getFeatureImportanceDict(X.head(500))
+    #     print("\nTop Feature Importances:")
+    #     for feature, score in list(importance_dict.items())[:5]:
+    #         print(f"{feature}: {score:.4f}")
 
-    except Exception as e:
-        print(f"Warning: Could not generate SHAP plots. Error: {e}")
+    # except Exception as e:
+    #     print(f"Warning: Could not generate SHAP plots. Error: {e}")
 
 
 if __name__ == "__main__":
