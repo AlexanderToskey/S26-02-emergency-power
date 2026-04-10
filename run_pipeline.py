@@ -83,6 +83,8 @@ def main():
     merged_occ = merged_occ.merge(county_stats, on="fips_code", how="left")
 
     X_occ_full, y_occ_full = run_occ_pipeline(merged_occ)
+    # fips_code was removed from occurrence features but is needed for the cascade join
+    X_occ_full['fips_code'] = merged_occ.loc[X_occ_full.index, 'fips_code'].values
     
 
     # Scope and duration datasets
