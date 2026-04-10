@@ -73,8 +73,14 @@ def main():
     # Occurrence dataset
     print("\n--- Building Occurrence (County-Day) Dataset ---")
     #print(outages.columns)
-    occurrence_labels = build_occurrence_labels(outages)
+    occurrence_labels = build_occurrence_labels(outages, min_customers=100)
     merged_occ = merge_occurrence_with_weather(occurrence_labels, ghcnd)
+
+    # Merge county historical stats so occurrence model features match training
+    county_stats = pd.read_csv(data_dir / "county_stats.csv")
+    county_stats["fips_code"] = county_stats["fips_code"].astype(str).str.zfill(5)
+    merged_occ["fips_code"] = merged_occ["fips_code"].astype(str).str.zfill(5)
+    merged_occ = merged_occ.merge(county_stats, on="fips_code", how="left")
 
     X_occ_full, y_occ_full = run_occ_pipeline(merged_occ)
     
