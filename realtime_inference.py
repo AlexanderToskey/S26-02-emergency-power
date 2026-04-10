@@ -68,8 +68,7 @@ _WEATHER_RETRIES = 3
 _WEATHER_RETRY_DELAY = 2.0  # seconds between retries
 
 # Minimum predicted customers to surface an occurrence as a real outage.
-# The occurrence model was trained on customers_out > 0 (any outage, even 1 customer),
-# so nearly every county gets flagged on calm days. Filtering by scope removes noise.
+# Retrained model uses threshold >= 100 customers, but scope filter adds a secondary check.
 _MIN_SCOPE_CUSTOMERS = 50
 
 # ── Module-level state ─────────────────────────────────────────────────────────

@@ -93,13 +93,16 @@ def merge_occurrence_with_weather(
 
     return merged
 
-def build_occurrence_labels(outages_df: pd.DataFrame) -> pd.DataFrame:
+def build_occurrence_labels(outages_df: pd.DataFrame, min_customers: int = 100) -> pd.DataFrame:
     """
     Convert raw EAGLE-I outage snapshots into county-day binary occurrence labels.
 
     For each (fips_code, date):
-        outage_occurred = 1 if customers_out > 0 at any snapshot that day
+        outage_occurred = 1 if max customers_affected >= min_customers that day
         outage_occurred = 0 otherwise
+
+    min_customers: minimum customer threshold for a day to count as an outage.
+        Default 100 filters routine 1-5 customer line faults.
 
     Returns:
         DataFrame with:
@@ -125,7 +128,7 @@ def build_occurrence_labels(outages_df: pd.DataFrame) -> pd.DataFrame:
     )
 
     grouped["outage_occurred"] = (
-        grouped["max_customers_affected"] > 0
+        grouped["max_customers_affected"] >= min_customers
     ).astype(int)
 
     print(

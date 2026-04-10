@@ -1,4 +1,5 @@
 from pathlib import Path
+import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from data_loader_occurrence import (
@@ -36,7 +37,8 @@ def main():
     # STEP 2: Build county-day occurrence labels
     # ------------------------------------------------------------------
     print("Building county-day occurrence labels...")
-    occurrence = build_occurrence_labels(outages)
+    # min_customers=100 filters routine 1-5 customer line faults
+    occurrence = build_occurrence_labels(outages, min_customers=100)
 
     # ------------------------------------------------------------------
     # STEP 3: Load daily weather
@@ -49,6 +51,13 @@ def main():
     # ------------------------------------------------------------------
     print("Merging occurrence labels with weather...")
     merged = merge_occurrence_with_weather(occurrence, ghcnd)
+
+    # Merge county historical stats so the model can use them instead of fips_code
+    print("Merging county historical stats...")
+    county_stats = pd.read_csv(data_dir / "county_stats.csv")
+    county_stats["fips_code"] = county_stats["fips_code"].astype(str).str.zfill(5)
+    merged["fips_code"] = merged["fips_code"].astype(str).str.zfill(5)
+    merged = merged.merge(county_stats, on="fips_code", how="left")
 
     summarize_class_balance(merged)
 
@@ -118,12 +127,10 @@ def main():
     # ------------------------------------------------------------------
     # STEP 8.5: Save Model to Central Directory
     # ------------------------------------------------------------------
-    # print("\nSaving occurrence model...")
-    # #model_dir = Path("models")
-    # model_dir.mkdir(parents=True, exist_ok=True)
-    
-    # # Assuming OutageOccurrenceModel has a save() method
-    # model.save(model_dir / "occurrence_model.joblib")
+    print("\nSaving occurrence model...")
+    model_dir.mkdir(parents=True, exist_ok=True)
+    model.save(model_dir / "occurrence_model.joblib")
+    print(f"Saved to {model_dir / 'occurrence_model.joblib'}")
 
     # ------------------------------------------------------------------
     # STEP 9: Feature importance

@@ -145,11 +145,13 @@ def prepare_features(
     # --- 2. Default Weather & Core Features ---
     if feature_cols is None:
         feature_cols = [
-            "fips_code",
+            # removed fips_code — memorizes county base rates, not weather signal
             "year",
             "month",
             "day",
             "dayofweek",
+            "dayofyear",
+            "is_weekend",
             "prcp_mm",
             "snow_mm",
             "snwd_mm",
@@ -162,6 +164,12 @@ def prepare_features(
             "wt_blowing_snow",
             "wt_freezing_rain",
             "wt_snow",
+            # county historical stats — better proxy for county risk than raw fips_code
+            "county_median_duration",
+            "county_long_rate",
+            "county_median_scope",
+            "county_large_outage_rate",
+            "county_max_customers",
         ]
 
     # --- 3. Include storm flags if present ---

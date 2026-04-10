@@ -23,7 +23,9 @@ class OutageOccurrenceModel:
             "subsample": 0.8,
             "colsample_bytree": 0.8,
             "random_state": 42,
-            "use_label_encoder": False
+            "use_label_encoder": False,
+            # ~8:1 negative:positive ratio at >=100 customer threshold
+            "scale_pos_weight": 8,
         }
 
         self.model = xgb.XGBClassifier(**default_params)    # XGBoost model
