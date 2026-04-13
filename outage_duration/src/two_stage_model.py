@@ -19,6 +19,7 @@ from typing import Dict, Any, Optional, Tuple
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
+from sklearn.ensemble import ExtraTreesClassifier
 
 
 LONG_THRESHOLD_MIN = 240.0  # 4 hours — same as PRD tolerance boundary
@@ -45,19 +46,29 @@ class TwoStageOutageModel:
         self.thresholdMin = thresholdMin
 
         # ── Stage 1: classifier ───────────────────────────────────────────────
+        # defaultClassifierParams = {
+        #     'objective': 'binary:logistic',
+        #     'eval_metric': 'aucpr',
+        #     'max_depth': 5,
+        #     'learning_rate': 0.1,
+        #     'n_estimators': 500,
+        #     'early_stopping_rounds': 50,
+        #     'scale_pos_weight': 2.5,  # compensates for ~71/29 short/long imbalance
+        #     'random_state': 42,
+        #     'n_jobs': -1,
+        # }
+        # self.classifierParams = {**defaultClassifierParams, **(classifierParams or {})}
+        # self.classifier = xgb.XGBClassifier(**self.classifierParams)
         defaultClassifierParams = {
-            'objective': 'binary:logistic',
-            'eval_metric': 'aucpr',
-            'max_depth': 5,
-            'learning_rate': 0.1,
             'n_estimators': 500,
-            'early_stopping_rounds': 50,
-            'scale_pos_weight': 2.5,  # compensates for ~71/29 short/long imbalance
+            'max_depth': 15,
+            'min_samples_split': 5,
+            'class_weight': 'balanced', # Handles the short/long imbalance
             'random_state': 42,
             'n_jobs': -1,
         }
         self.classifierParams = {**defaultClassifierParams, **(classifierParams or {})}
-        self.classifier = xgb.XGBClassifier(**self.classifierParams)
+        self.classifier = ExtraTreesClassifier(**self.classifierParams)
 
         # ── Stage 2a: short outage regressor ──────────────────────────────────
         defaultShortParams = {
@@ -137,10 +148,10 @@ class TwoStageOutageModel:
         )
 
         self.classifier.fit(
-            xTrain,
+            xTrain.fillna(0),
             yTrainLabel,
-            eval_set=[(xVal, yValLabel)],
-            verbose=False,
+            # eval_set=[(xVal, yValLabel)],
+            # verbose=False,
         )
 
         # tune threshold on val set: maximize balanced accuracy
@@ -240,7 +251,7 @@ class TwoStageOutageModel:
         if not self.isTrained:
             raise ValueError("model hasn't been trained yet, call train() first")
 
-        pLong = self.classifier.predict_proba(X)[:, 1]
+        pLong = self.classifier.predict_proba(X.fillna(0))[:, 1]
 
         if softRouting:
             # run both regressors on every sample, then blend by long probability
@@ -275,7 +286,7 @@ class TwoStageOutageModel:
         if not self.isTrained:
             raise ValueError("model hasn't been trained yet, call train() first")
 
-        probs = self.classifier.predict_proba(X)[:, 1]
+        probs = self.classifier.predict_proba(X.fillna(0))[:, 1]
         isLong = probs >= self.classifierThreshold
 
         preds = np.zeros(len(X))

@@ -351,6 +351,12 @@ def prepare_features(
         raise ValueError(f"Target column '{target_col}' not found in DataFrame")
 
     df = df.copy()
+    if 'awnd_ms' not in df.columns:
+        df['awnd_ms'] = 0.0
+
+    if 'wsfg_ms' not in df.columns:
+        df['wsfg_ms'] = np.nan
+        df['wsfg_ms'].fillna(df['awnd_ms'] * 1.5)
 
     # ----------------------------
     # 1) Choose "important" base features

@@ -46,10 +46,27 @@ def main():
     print("Running preprocessing...")
     X, y = run_full_pipeline(merged)  # y is duration in minutes
 
+    print("\nExporting a small sample of the preprocessed data...")
+    
+    # Recombine features (X) and target (y) so they are in one file
+    sample_export = X.copy()
+    sample_export['TARGET_duration'] = y
+    
+    # Grab a random sample of 100 rows
+    small_sample = sample_export.sample(n=100, random_state=42)
+    
+    # Save it to the data directory
+    sample_path = data_dir / "preprocessed_sample_duration.csv"
+    small_sample.to_csv(sample_path, index=False)
+    print(f"Saved 100 sample rows to {sample_path}")
+    # ---------------------------------------
+
     print("Splitting train/test...")
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
+
+
 
     if USE_TWO_STAGE:
         # ── Two-stage model ────────────────────────────────────────────────────
@@ -61,9 +78,9 @@ def main():
         # At 0.70 the classifier needs high confidence before routing to the
         # long regressor, so fewer short outages get misrouted.
         # Long accuracy will drop -- that is acceptable for this configuration.
-        twoStage.classifierThreshold = 0.70
-        print(f"[train_eval] Classifier threshold overridden to {twoStage.classifierThreshold:.2f} "
-              f"(short-accuracy focus)")
+        # twoStage.classifierThreshold = 0.70
+        # print(f"[train_eval] Classifier threshold overridden to {twoStage.classifierThreshold:.2f} "
+        #       f"(short-accuracy focus)")
 
         print("\nEvaluating two-stage model...")
         hardPreds, routing = twoStage.predictWithRouting(X_test)
@@ -97,12 +114,12 @@ def main():
         )[:10]:
             print(f"  {k:30s} {v:.4f}")
 
-        print("\nSaving two-stage duration model...")
-        model_dir = Path("../models")
-        model_dir.mkdir(parents=True, exist_ok=True)
+        # print("\nSaving two-stage duration model...")
+        # model_dir = Path("../models")
+        # model_dir.mkdir(parents=True, exist_ok=True)
         
-        # Save the two-stage model
-        twoStage.save(model_dir / "duration_model.joblib")
+        # # Save the two-stage model
+        # twoStage.save(model_dir / "duration_model.joblib")
 
     else:
         # ── Single-stage model only ────────────────────────────────────────────

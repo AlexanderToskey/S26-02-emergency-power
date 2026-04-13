@@ -76,6 +76,21 @@ def main():
 
     X = X_full.drop(columns=cols_to_drop)
 
+    print("\nExporting a small sample of the preprocessed data...")
+    
+    # Recombine features (X) and target (y) so they are in one file
+    sample_export = X.copy()
+    sample_export['TARGET_peak_customers_affected'] = y
+    
+    # Grab a random sample of 100 rows
+    small_sample = sample_export.sample(n=100, random_state=42)
+    
+    # Save it to the data directory
+    sample_path = data_dir / "preprocessed_sample_scope.csv"
+    small_sample.to_csv(sample_path, index=False)
+    print(f"Saved 100 sample rows to {sample_path}")
+    # ---------------------------------------
+
     X_train, y_train = X[train_mask], y[train_mask]
     X_test, y_test = X[test_mask], y[test_mask]
 
@@ -138,11 +153,11 @@ def main():
         print(f"  {k:30s} {v:.4f}")
 
     # --- 6.5 Save Scope Model ---
-    print("\nSaving two-stage scope model...")
-    model_dir = Path("../models")
-    model_dir.mkdir(parents=True, exist_ok=True)
+    # print("\nSaving two-stage scope model...")
+    # model_dir = Path("../models")
+    # model_dir.mkdir(parents=True, exist_ok=True)
     
-    model.save(model_dir / "scope_model.joblib")
+    # model.save(model_dir / "scope_model.joblib")
 
     # --- 7. Explainer (Optional) ---
 

@@ -340,6 +340,8 @@ def main():
     for col in wt_cols:
         pivot[col] = pivot[col].fillna(0).astype(int)
 
+    print(f"[download] Columns found after pivot: {pivot.columns.tolist()}")
+
     # ── 6. Join station → county ──────────────────────────────────────────────
     pivot = pivot.merge(
         station_map[["station_id", "fips_code"]], on="station_id", how="left"
