@@ -113,6 +113,9 @@ def main():
     # Occurrence models usually support class_weight or scale_pos_weight
     model.train(X_train, y_train)
 
+    # NEW: Tune threshold using test set
+    model.tune_threshold(X_test, y_test)
+
     # ------------------------------------------------------------------
     # STEP 8: Evaluate
     # ------------------------------------------------------------------
@@ -129,7 +132,8 @@ def main():
     # ------------------------------------------------------------------
     print("\nSaving occurrence model...")
     model_dir.mkdir(parents=True, exist_ok=True)
-    model.save(model_dir / "occurrence_model.joblib")
+    #model.save(model_dir / "occurrence_model.joblib")
+    model.save(model_dir / "occurrence_ensemble.joblib")    # NEW: Save ensemble model instead
     print(f"Saved to {model_dir / 'occurrence_model.joblib'}")
 
     # ------------------------------------------------------------------

@@ -7,7 +7,14 @@ def load_eagle_outages(file_paths):
     outages = pd.concat(dfs, ignore_index=True)
 
     # Ensure datetime
-    outages["run_start_time"] = pd.to_datetime(outages["run_start_time"])
+    # Fix formatting issue
+    outages["run_start_time"] = pd.to_datetime(
+        outages["run_start_time"],
+        errors="coerce"
+    )
+
+    # Drop empty rows
+    outages = outages.dropna(subset=["run_start_time"])
 
     return outages
 
