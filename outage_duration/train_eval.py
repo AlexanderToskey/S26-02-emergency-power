@@ -1,5 +1,6 @@
 from pathlib import Path
 from sklearn.model_selection import train_test_split
+import numpy as np
 
 from src.data_loader import (
     load_eagle_outages,
@@ -197,6 +198,53 @@ def main():
         for k, v in sorted(
             twoStage.getLongRegressorImportances().items(), key=lambda x: x[1], reverse=True
         )[:10]:
+            print(f"  {k:30s} {v:.4f}")
+
+
+        # --- 5. ORACLE EVALUATION (Bypassing Stage 1) ---
+        THRESHOLD = 240.0 #minutes
+
+        print("\n" + "="*50)
+        print("ORACLE EVALUATION: PERFECT ROUTING")
+        print("="*50)
+
+        # Define the Oracle Masks based on ACTUAL values in the test set
+        test_large_mask = y_test >= THRESHOLD
+        test_small_mask = y_test < THRESHOLD
+
+        # Initialize final prediction array
+        final_preds = np.empty_like(y_test, dtype=float)
+
+        # 5a. Small Specialist Oracle Run
+        if test_small_mask.sum() > 0:
+            print(f"Routing {test_small_mask.sum():,} actual small events to Small Specialist...")
+            # We access the sub-regressor directly to skip the internal classifier
+            # Note: Regressor predicts log1p, so we must expm1 it.
+            pred_log_small = twoStage.shortRegressor.predict(X_test[test_small_mask])
+            final_preds[test_small_mask] = np.expm1(np.clip(pred_log_small, -20, 20))
+
+        # 5b. Large Specialist Oracle Run
+        if test_large_mask.sum() > 0:
+            print(f"Routing {test_large_mask.sum():,} actual large events to Large Specialist...")
+            pred_log_large = twoStage.longRegressor.predict(X_test[test_large_mask])
+            final_preds[test_large_mask] = np.expm1(np.clip(pred_log_large, -20, 20))
+
+        # --- 6. Final Oracle Report ---
+        print("\n" + "="*50)
+        print("THEORETICAL MAXIMUM PIPELINE PERFORMANCE")
+        print("="*50)
+        
+        metrics = evaluateModel(y_test.values, final_preds)
+        printEvaluationReport(metrics)
+
+        print("\nTop Features for Short Specialist (Oracle Context):")
+        s_imp = twoStage.getShortRegressorImportances()
+        for k, v in sorted(s_imp.items(), key=lambda x: x[1], reverse=True)[:50]:
+            print(f"  {k:30s} {v:.4f}")
+
+        print("\nTop Features for Large Specialist (Oracle Context):")
+        l_imp = twoStage.getLongRegressorImportances()
+        for k, v in sorted(l_imp.items(), key=lambda x: x[1], reverse=True)[:50]:
             print(f"  {k:30s} {v:.4f}")
 
         print("\nSaving two-stage duration model...")

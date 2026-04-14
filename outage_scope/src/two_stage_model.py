@@ -61,7 +61,7 @@ class TwoStageScopeModel:
 
         # ── Stage 2a: small outage regressor ──────────────────────────────────
         defaultShortParams = {
-            'objective': 'reg:squarederror',
+            'objective': 'reg:absoluteerror',
             'max_depth': 5,
             'learning_rate': 0.1,
             'n_estimators': 500,
@@ -75,7 +75,7 @@ class TwoStageScopeModel:
 
         # ── Stage 2b: large outage regressor ──────────────────────────────────
         defaultLongParams = {
-            'objective': 'reg:squarederror',
+            'objective': 'reg:absoluteerror',
             'max_depth': 6,
             'learning_rate': 0.1,
             'n_estimators': 500,

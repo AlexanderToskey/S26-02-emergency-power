@@ -385,15 +385,15 @@ def prepare_features(
 
     df = df.copy()
 
-    for col in ['wsf5_ms', 'wsf2_ms', 'wsfg_ms', 'awnd_ms']:
-        if col not in df.columns:
-            df[col] = np.nan
+    # for col in ['wsf5_ms', 'wsf2_ms', 'wsfg_ms', 'awnd_ms']:
+    #     if col not in df.columns:
+    #         df[col] = np.nan
 
-    df['max_wind_speed'] = (
-    df['wsf5_ms']
-    .fillna(df['wsf2_ms'])
-    .fillna(df['awnd_ms'] * 1.5)
-    .fillna(0.0))
+    # df['max_wind_speed'] = (
+    # df['wsf5_ms']
+    # .fillna(df['wsf2_ms'])
+    # .fillna(df['awnd_ms'] * 1.5)
+    # .fillna(0.0))
 
     # ----------------------------
     # 1) Choose "important" base features
