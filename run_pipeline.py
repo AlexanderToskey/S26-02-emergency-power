@@ -67,7 +67,9 @@ def main():
     print("\n[2] Loading Raw Data...")
     eagle_files = sorted(data_dir.glob("eaglei_outages_*.csv"))
     outages = load_eagle_outages(eagle_files)
-    ghcnd = load_ghcnd_weather(data_dir / "ghcnd_va_daily.csv")
+    # ghcnd = load_ghcnd_weather(data_dir / "ghcnd_va_daily.csv")
+    ghcnd = load_ghcnd_weather(data_dir / "openmeteo_va_historical.csv")
+
     weather = load_noaa_weather(data_dir / "noaa_storm_events_va_2014_2022.csv")
 
     # Occurrence dataset
@@ -118,6 +120,8 @@ def main():
     y_dur_test = y_dur_full[dur_test_mask].copy()
 
     print(scope_model.featureNames)
+    print(dur_model.featureNames)
+
 
     print(f"  Occurrence Test Samples: {len(X_occ_test):,}")
     print(f"  Event Test Samples:      {len(X_scope_test):,}")

@@ -154,11 +154,11 @@ def main():
         print(f"  {k:30s} {v:.4f}")
 
     # --- 6.5 Save Scope Model ---
-    # print("\nSaving two-stage scope model...")
-    # model_dir = Path("../models")
-    # model_dir.mkdir(parents=True, exist_ok=True)
+    print("\nSaving two-stage scope model...")
+    model_dir = Path("../models")
+    model_dir.mkdir(parents=True, exist_ok=True)
     
-    # model.save(model_dir / "scope_model.joblib")
+    model.save(model_dir / "scope_model.joblib")
 
     # --- 7. Explainer (Optional) ---
 

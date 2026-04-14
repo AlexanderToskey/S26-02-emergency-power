@@ -199,12 +199,12 @@ def main():
         )[:10]:
             print(f"  {k:30s} {v:.4f}")
 
-        # print("\nSaving two-stage duration model...")
-        # model_dir = Path("../models")
-        # model_dir.mkdir(parents=True, exist_ok=True)
+        print("\nSaving two-stage duration model...")
+        model_dir = Path("../models")
+        model_dir.mkdir(parents=True, exist_ok=True)
         
-        # # Save the two-stage model
-        # twoStage.save(model_dir / "duration_model.joblib")
+        # Save the two-stage model
+        twoStage.save(model_dir / "duration_model.joblib")
 
     else:
         # ── Single-stage model only ────────────────────────────────────────────
