@@ -321,10 +321,12 @@ def prepare_features(
             "pct_growth_15m",
             "initial_impact_density",
             # NOAA Storm Events context (named events only, ~7% coverage)
+            # removed magnitude_missing — redundant with max_magnitude == 0
             "has_weather_event",
             "max_magnitude",
-            "magnitude_missing",
             # GHCN-Daily measured weather (~91% coverage)
+            # removed wt_fog — near-zero importance across all sub-models
+            # removed wt_drizzle, wt_rain — low-signal, prcp_mm captures rain intensity better
             "prcp_mm",
             "snow_mm",
             "snwd_mm",
@@ -332,12 +334,9 @@ def prepare_features(
             "tmin_c",
             "awnd_ms",
             "wsfg_ms",       # peak wind gust (more predictive of severe damage than avg wind)
-            "wt_fog",
             "wt_thunder",
             "wt_ice",
             "wt_blowing_snow",
-            "wt_drizzle",
-            "wt_rain",
             "wt_freezing_rain",
             "wt_snow",
         ]

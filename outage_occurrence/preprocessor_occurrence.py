@@ -146,12 +146,12 @@ def prepare_features(
     if feature_cols is None:
         feature_cols = [
             # removed fips_code — memorizes county base rates, not weather signal
+            # removed dayofyear — redundant with month+day
+            # removed is_weekend — no causal link to outage occurrence
             "year",
             "month",
             "day",
             "dayofweek",
-            "dayofyear",
-            "is_weekend",
             "prcp_mm",
             "snow_mm",
             "snwd_mm",

@@ -455,26 +455,25 @@ def prepare_features(
         "pct_growth_15m",
         
         # NOAA Storm Events (The 7% High-Severity Signal)
+        # removed magnitude_missing — redundant with max_magnitude == 0
         "has_weather_event",
         "max_magnitude",
-        "magnitude_missing",
-        
+
         # Open-Meteo Weather (The 100% Gapless Signal)
         "prcp_mm",
         "tmax_c",
         "tmin_c",
-        "awnd_ms", 
+        "awnd_ms",
         "wsfg_ms",  # Replaces max_wind_speed logic
-        
+
         # Open-Meteo Weather Flags
+        # removed wt_drizzle, wt_rain — low-signal, prcp_mm captures intensity better
         "wt_fog",
         "wt_thunder",
         "wt_snow",
-        "wt_freezing_rain", 
+        "wt_freezing_rain",
         "wt_ice",
         "wt_blowing_snow",
-        "wt_drizzle",
-        "wt_rain",
     ]
 
     # Keep only columns that actually exist (avoid crashing if a feature wasn't created)
