@@ -27,7 +27,8 @@ def main():
     outages = load_eagle_outages(eagle_files)
     weather = load_noaa_weather(data_dir / "noaa_storm_events_va_2014_2022.csv")
     merged = merge_weather_outages(outages, weather)
-    ghcnd = load_ghcnd_weather(data_dir / "ghcnd_va_daily.csv")
+    # ghcnd = load_ghcnd_weather(data_dir / "ghcnd_va_daily.csv")
+    ghcnd = load_ghcnd_weather(data_dir / "openmeteo_va_historical.csv")
     merged = merge_ghcnd_weather(merged, ghcnd)
 
     # --- 2. Preprocessing ---

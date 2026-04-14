@@ -156,11 +156,44 @@ def calculate_duration(
     # Pass GHCN-Daily daily weather columns through to the event level.
     # Use "first" since GHCN data is daily -- all snapshots on the same day
     # have the same value, and we want the weather at outage START.
+    # _ghcnd_cols = [
+    #     "prcp_mm",
+    #     "snow_mm",
+    #     "snwd_mm",
+    #     "tmax_c",
+    #     "tmin_c",
+    #     "awnd_ms",
+    #     "wsf2_ms",        # Added
+    #     "wsf5_ms",        # Added
+    #     "wsfg_ms",
+    #     "wt_fog",
+    #     "wt_heavy_fog",   # Added
+    #     "wt_haze",        # Added
+    #     "wt_thunder",
+    #     "wt_ice",
+    #     "wt_ice_pellets", # Added
+    #     "wt_blowing_snow",
+    #     "wt_drizzle",
+    #     "wt_rain",
+    #     "wt_freezing_rain",
+    #     "wt_snow",
+    # ]
     _ghcnd_cols = [
-        "prcp_mm", "snow_mm", "snwd_mm", "tmax_c", "tmin_c", "awnd_ms", "wsfg_ms",
-        "wt_fog", "wt_thunder", "wt_ice", "wt_blowing_snow", "wt_drizzle",
-        "wt_rain", "wt_freezing_rain", "wt_snow",
-    ]
+            "prcp_mm",
+            "tmax_c",
+            "tmin_c",
+            "awnd_ms",
+            "wsfg_ms",
+            "wt_fog",
+            "wt_thunder",
+            "wt_snow",
+            "wt_freezing_rain",
+            "wt_ice",
+            "wt_blowing_snow",
+            "wt_drizzle",
+            "wt_rain",
+        ]
+
     for col in _ghcnd_cols:
         if col in outage_rows.columns:
             agg_dict[col] = "first"
@@ -351,54 +384,98 @@ def prepare_features(
         raise ValueError(f"Target column '{target_col}' not found in DataFrame")
 
     df = df.copy()
-    if 'awnd_ms' not in df.columns:
-        df['awnd_ms'] = 0.0
 
-    if 'wsfg_ms' not in df.columns:
-        df['wsfg_ms'] = np.nan
-        df['wsfg_ms'].fillna(df['awnd_ms'] * 1.5)
+    for col in ['wsf5_ms', 'wsf2_ms', 'wsfg_ms', 'awnd_ms']:
+        if col not in df.columns:
+            df[col] = np.nan
+
+    df['max_wind_speed'] = (
+    df['wsf5_ms']
+    .fillna(df['wsf2_ms'])
+    .fillna(df['awnd_ms'] * 1.5)
+    .fillna(0.0))
 
     # ----------------------------
     # 1) Choose "important" base features
     # ----------------------------
     if feature_cols is None:
+        # feature_cols = [
+        #     # location
+        #     "fips_code",
+        #     # operational timing
+        #     "year",
+        #     "month",
+        #     "day",
+        #     "hour",
+        #     "dayofweek",
+        #     # county historical patterns (strong classifier signal)
+        #     "county_median_duration",
+        #     "county_long_rate",
+        #     # early outage dynamics
+        #     "initial_customers_affected",
+        #     "delta_customers_affected_15m",
+        #     "pct_growth_15m",
+        #     # NOAA Storm Events context (named events only, ~7% coverage)
+        #     "has_weather_event",
+        #     "max_magnitude",
+        #     "magnitude_missing",
+        #     # GHCN-Daily measured weather (~91% coverage)
+        #     "prcp_mm",
+        #     "snow_mm",
+        #     "snwd_mm",
+        #     "tmax_c",
+        #     "tmin_c",
+        #     "awnd_ms",
+        #     "max_wind_speed",       # peak wind gust (more predictive of severe damage than avg wind)
+        #     "wt_fog",
+        #     "wt_thunder",
+        #     "wt_ice",
+        #     "wt_blowing_snow",
+        #     "wt_drizzle",
+        #     "wt_rain",
+        #     "wt_freezing_rain",
+        #     "wt_snow",
+        # ]
         feature_cols = [
-            # location
-            "fips_code",
-            # operational timing
-            "year",
-            "month",
-            "day",
-            "hour",
-            "dayofweek",
-            # county historical patterns (strong classifier signal)
-            "county_median_duration",
-            "county_long_rate",
-            # early outage dynamics
-            "initial_customers_affected",
-            "delta_customers_affected_15m",
-            "pct_growth_15m",
-            # NOAA Storm Events context (named events only, ~7% coverage)
-            "has_weather_event",
-            "max_magnitude",
-            "magnitude_missing",
-            # GHCN-Daily measured weather (~91% coverage)
-            "prcp_mm",
-            "snow_mm",
-            "snwd_mm",
-            "tmax_c",
-            "tmin_c",
-            "awnd_ms",
-            "wsfg_ms",       # peak wind gust (more predictive of severe damage than avg wind)
-            "wt_fog",
-            "wt_thunder",
-            "wt_ice",
-            "wt_blowing_snow",
-            "wt_drizzle",
-            "wt_rain",
-            "wt_freezing_rain",
-            "wt_snow",
-        ]
+        # Temporal & Location
+        "fips_code",
+        "year",
+        "month",
+        "day",
+        "hour",
+        "dayofweek",
+        
+        # Historical County Stats
+        "county_median_duration",
+        "county_long_rate",
+        
+        # Outage Dynamics
+        "initial_customers_affected",
+        "delta_customers_affected_15m",
+        "pct_growth_15m",
+        
+        # NOAA Storm Events (The 7% High-Severity Signal)
+        "has_weather_event",
+        "max_magnitude",
+        "magnitude_missing",
+        
+        # Open-Meteo Weather (The 100% Gapless Signal)
+        "prcp_mm",
+        "tmax_c",
+        "tmin_c",
+        "awnd_ms", 
+        "wsfg_ms",  # Replaces max_wind_speed logic
+        
+        # Open-Meteo Weather Flags
+        "wt_fog",
+        "wt_thunder",
+        "wt_snow",
+        "wt_freezing_rain", 
+        "wt_ice",
+        "wt_blowing_snow",
+        "wt_drizzle",
+        "wt_rain",
+    ]
 
     # Keep only columns that actually exist (avoid crashing if a feature wasn't created)
     base_available = [c for c in feature_cols if c in df.columns]

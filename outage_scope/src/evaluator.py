@@ -60,9 +60,9 @@ def calculateMAPE(yTrue: np.ndarray, yPred: np.ndarray) -> float:
 
 
 def calculateToleranceAccuracy(yTrue: np.ndarray, yPred: np.ndarray,
-                               shortThreshold: float = 500, # 500 Customers
-                               shortTolerance: float = 5,  # +/- 50 customers
-                               longTolerancePct: float = 0.10) -> Dict[str, float]: # +/- 20%
+                               shortThreshold: float = 100,
+                               shortTolerance: float = 20,
+                               longTolerancePct: float = 0.20) -> Dict[str, float]: # +/- 20%
     """
     calculates accuracy within tolerance as defined in the PRD for Scope
 
@@ -218,9 +218,9 @@ def printTwoStageReport(
     print(f"  MAPE: {regressionMetrics['mape']:.2f}%")
 
     print(f"\nTolerance Accuracy:")
-    print(f"  Small outages (<500 cust): {regressionMetrics['short_outage_accuracy']:.1f}% "
+    print(f"  Small outages (<100 cust): {regressionMetrics['short_outage_accuracy']:.1f}% "
           f"(n={regressionMetrics['short_outage_count']})")
-    print(f"  Large outages (>=500 cust): {regressionMetrics['long_outage_accuracy']:.1f}% "
+    print(f"  Large outages (>=100 cust): {regressionMetrics['long_outage_accuracy']:.1f}% "
           f"(n={regressionMetrics['long_outage_count']})")
     print(f"  Overall: {regressionMetrics['overall_accuracy']:.1f}%")
 

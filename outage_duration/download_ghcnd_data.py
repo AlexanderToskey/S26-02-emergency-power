@@ -50,22 +50,25 @@ CHUNK_SIZE = 2 * 1024 * 1024  # 2 MB download chunks
 # GHCN-Daily elements to keep.
 # Raw values use NOAA's encoding; scale factors convert to real units.
 ELEMENTS = {
-    "PRCP": 0.1,   # tenths of mm  → mm
-    "SNOW": 1.0,   # mm            → mm
-    "SNWD": 1.0,   # mm            → mm
-    "TMAX": 0.1,   # tenths of °C  → °C
-    "TMIN": 0.1,   # tenths of °C  → °C
-    "AWND": 0.1,   # tenths of m/s → m/s  (daily avg wind speed)
-    "WSFG": 0.1,   # tenths of m/s → m/s  (peak gust)
-    # weather type flags: value=1 when the condition occurred that day
-    "WT01": 1.0,   # fog / ice fog
-    "WT03": 1.0,   # thunder
-    "WT06": 1.0,   # glaze or ice pellets
-    "WT09": 1.0,   # blowing or drifting snow
-    "WT14": 1.0,   # drizzle
-    "WT16": 1.0,   # rain
-    "WT17": 1.0,   # freezing rain
-    "WT18": 1.0,   # snow
+    "PRCP": 0.1,  # Precipitation (tenths of mm)
+    "SNOW": 1.0,  # Snowfall (mm)
+    "SNWD": 1.0,  # Snow depth (mm)
+    "TMAX": 0.1,  # Max temperature (tenths of °C)
+    "TMIN": 0.1,  # Min temperature (tenths of °C)
+    "AWND": 0.1,  # Avg daily wind speed (tenths of m/s)
+    "WSF2": 0.1,  # Fastest 2-min wind
+    "WSF5": 0.1,  # Fastest 5-sec wind
+    "WT01": 1.0,  # Fog/Ice Fog
+    "WT02": 1.0,  # Heavy Fog
+    "WT03": 1.0,  # Thunder
+    "WT04": 1.0,  # Ice Pellets
+    "WT06": 1.0,  # Glaze or Ice Pellets
+    "WT08": 1.0,  # Smoke or Haze
+    "WT09": 1.0,  # Blowing/Drifting Snow
+    "WT14": 1.0,  # Drizzle
+    "WT16": 1.0,  # Rain
+    "WT17": 1.0,  # Freezing Rain
+    "WT18": 1.0,  # Snow
 }
 
 # Human-readable output column names
@@ -76,10 +79,14 @@ _RENAME = {
     "TMAX": "tmax_c",
     "TMIN": "tmin_c",
     "AWND": "awnd_ms",
-    "WSFG": "wsfg_ms",
+    "WSF2": "wsf2_ms",
+    "WSF5": "wsf5_ms",
     "WT01": "wt_fog",
+    "WT02": "wt_heavy_fog",
     "WT03": "wt_thunder",
+    "WT04": "wt_ice_pellets",
     "WT06": "wt_ice",
+    "WT08": "wt_haze",
     "WT09": "wt_blowing_snow",
     "WT14": "wt_drizzle",
     "WT16": "wt_rain",
