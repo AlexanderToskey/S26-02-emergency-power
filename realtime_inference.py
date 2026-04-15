@@ -93,10 +93,11 @@ _duration_explainer_small=None
 _duration_explainer_large=None
 _duration_explainer_classifier=None
 
-_ae_model     = None   # Autoencoder, loaded in init()
-_ae_mean      = None
-_ae_std       = None
-_ae_threshold = None
+_ae_model          = None   # Autoencoder, loaded in init()
+_ae_mean           = None
+_ae_std            = None
+_ae_threshold      = None
+_ae_feature_columns = None  # features the autoencoder was trained on
 
 _cached_forecast: Dict[str, Any] = {}  # date_str -> {fips -> prediction}
 _forecast_lock = threading.Lock()
@@ -721,8 +722,12 @@ def run_inference() -> Dict[str, Any]:
 
     # ------------------- Autoencoder Integration -------------------
     if _ae_model is not None:
-        # 1. Normalize features using training mean/std
-        X_occ_np = X_occ.values.astype(float)
+        # 1. Select only the features the autoencoder was trained on, then normalize
+        if _ae_feature_columns is not None:
+            X_ae = _align_features(X_occ, _ae_feature_columns)
+        else:
+            X_ae = X_occ
+        X_occ_np = X_ae.values.astype(float)
         X_occ_norm = (X_occ_np - _ae_mean) / _ae_std
 
         # 2. Detect anomalies
@@ -945,7 +950,7 @@ def load_autoencoder(path=MODELS_DIR / "autoencoder.pt"):
     Load the autoencoder to detect anomalous counties
     Called in init()
     """
-    global _ae_model, _ae_mean, _ae_std, _ae_threshold
+    global _ae_model, _ae_mean, _ae_std, _ae_threshold, _ae_feature_columns
 
     # Allow the numpy reconstruct function to unpickle properly
     with torch.serialization.safe_globals([np._core.multiarray._reconstruct]):
@@ -960,6 +965,7 @@ def load_autoencoder(path=MODELS_DIR / "autoencoder.pt"):
     _ae_mean = checkpoint["mean"]
     _ae_std = checkpoint["std"]
     _ae_threshold = checkpoint["threshold"]
+    _ae_feature_columns = checkpoint.get("feature_columns")
 
     print(f"[AE] Loaded autoencoder from {path}, threshold={_ae_threshold:.6f}")
 
