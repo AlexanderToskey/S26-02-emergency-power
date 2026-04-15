@@ -924,10 +924,13 @@ def compute_shap_for_fips(fips: str, explainer_name: str) -> Optional[dict]:
 
     model_row     = features["model_row"]
 
+    # Normalize shap values
+    sv = np.array(sv).astype(float).flatten()
+
     # Return top 10 features sorted by absolute SHAP contribution
     ranked = sorted(
         zip(feature_names, sv),
-        key=lambda x: abs(x[1]),
+        key=lambda x: abs(float(x[1])),
         reverse=True,
     )[:10]
 
