@@ -46,29 +46,19 @@ class TwoStageOutageModel:
         self.thresholdMin = thresholdMin
 
         # ── Stage 1: classifier ───────────────────────────────────────────────
-        # defaultClassifierParams = {
-        #     'objective': 'binary:logistic',
-        #     'eval_metric': 'aucpr',
-        #     'max_depth': 5,
-        #     'learning_rate': 0.1,
-        #     'n_estimators': 500,
-        #     'early_stopping_rounds': 50,
-        #     'scale_pos_weight': 2.5,  # compensates for ~71/29 short/long imbalance
-        #     'random_state': 42,
-        #     'n_jobs': -1,
-        # }
-        # self.classifierParams = {**defaultClassifierParams, **(classifierParams or {})}
-        # self.classifier = xgb.XGBClassifier(**self.classifierParams)
         defaultClassifierParams = {
+            'objective': 'binary:logistic',
+            'eval_metric': 'aucpr',
+            'max_depth': 5,
+            'learning_rate': 0.1,
             'n_estimators': 500,
-            'max_depth': 15,
-            'min_samples_split': 5,
-            'class_weight': 'balanced', # Handles the short/long imbalance
+            'early_stopping_rounds': 50,
+            'scale_pos_weight': 2.5,  # compensates for ~71/29 short/long imbalance
             'random_state': 42,
             'n_jobs': -1,
         }
         self.classifierParams = {**defaultClassifierParams, **(classifierParams or {})}
-        self.classifier = ExtraTreesClassifier(**self.classifierParams)
+        self.classifier = xgb.XGBClassifier(**self.classifierParams)
 
         # ── Stage 2a: short outage regressor ──────────────────────────────────
         defaultShortParams = {
@@ -150,8 +140,8 @@ class TwoStageOutageModel:
         self.classifier.fit(
             xTrain.fillna(0),
             yTrainLabel,
-            # eval_set=[(xVal, yValLabel)],
-            # verbose=False,
+            eval_set=[(xVal.fillna(0), yValLabel)],
+            verbose=False,
         )
 
         # tune threshold on val set: maximize balanced accuracy

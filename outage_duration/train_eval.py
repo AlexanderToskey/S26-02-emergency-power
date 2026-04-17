@@ -160,13 +160,7 @@ def main():
         twoStage = TwoStageOutageModel()
         twoStage.train(X_train, y_train)
 
-        # Raise threshold to prioritize short-outage accuracy.
-        # At 0.70 the classifier needs high confidence before routing to the
-        # long regressor, so fewer short outages get misrouted.
-        # Long accuracy will drop -- that is acceptable for this configuration.
-        twoStage.classifierThreshold = 0.70
-        print(f"[train_eval] Classifier threshold overridden to {twoStage.classifierThreshold:.2f} "
-              f"(short-accuracy focus)")
+        print(f"[train_eval] Using auto-tuned classifier threshold: {twoStage.classifierThreshold:.2f}")
 
         print("\nEvaluating two-stage model...")
         hardPreds, routing = twoStage.predictWithRouting(X_test)

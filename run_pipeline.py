@@ -53,7 +53,7 @@ def main():
     # =========================================================================
     print("\n[1] Loading Serialized Models from /models...")
     try:
-        occ_model = OutageOccurrenceModel.load(models_dir / "occurrence_model.joblib")
+        occ_model = OutageOccurrenceModel.load(models_dir / "occurrence_ensemble.joblib")
         scope_model = TwoStageScopeModel.load(models_dir / "scope_model.joblib")
         dur_model = TwoStageOutageModel.load(models_dir / "duration_model.joblib")
         print("  -> Models loaded successfully.")
@@ -140,7 +140,7 @@ def main():
     # --- 1. Occurrence Model Oracle ---
     print("\n--- 1. Occurrence Model (Standalone) ---")
     preds_occ, prob_occ = occ_model.predict(X_occ_test)
-    y_pred_occ = (prob_occ >= 0.5).astype(int)
+    y_pred_occ = preds_occ  # use model's F2-tuned threshold (not hardcoded 0.5)
 
     occ_metrics = evaluate_occ(y_occ_test.values, y_pred_occ, prob_occ)
     print_occ_report(occ_metrics)
@@ -194,6 +194,11 @@ def main():
     # 5a. STAGE 1 (Occurrence) maps to STAGE 2 (Event)
     occ_preds_df = X_occ_test[['fips_code', 'year', 'month', 'day']].copy()
     occ_preds_df['occ_prediction'] = y_pred_occ
+
+    # Align fips_code types — occurrence uses zero-padded strings, scope/duration use int64
+    occ_preds_df['fips_code'] = pd.to_numeric(occ_preds_df['fips_code'], errors='coerce').astype('int64')
+    X_scope_test['fips_code'] = pd.to_numeric(X_scope_test['fips_code'], errors='coerce').astype('int64')
+    X_dur_test['fips_code'] = pd.to_numeric(X_dur_test['fips_code'], errors='coerce').astype('int64')
 
     join_cols = ['fips_code', 'year', 'month', 'day']
 

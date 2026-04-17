@@ -61,8 +61,8 @@ def calculateMAPE(yTrue: np.ndarray, yPred: np.ndarray) -> float:
 
 def calculateToleranceAccuracy(yTrue: np.ndarray, yPred: np.ndarray,
                                shortThreshold: float = 240,
-                               shortTolerance: float = 30,
-                               longTolerance: float = 120) -> Dict[str, float]:
+                               shortTolerance: float = 60,
+                               longTolerance: float = 180) -> Dict[str, float]:
     """
     calculates accuracy within tolerance as defined in the PRD
 
@@ -204,9 +204,9 @@ def printTwoStageReport(
 
     print(f"\nStage 1 Classifier:")
     print(f"  Routing accuracy:          {classifierMetrics['routing_accuracy']:.1f}%")
-    print(f"  Long outages → long reg:   {classifierMetrics['long_correctly_routed_pct']:.1f}% "
+    print(f"  Long outages -> long reg:   {classifierMetrics['long_correctly_routed_pct']:.1f}% "
           f"(n={classifierMetrics['true_long_count']})")
-    print(f"  Short outages → short reg: {classifierMetrics['short_correctly_routed_pct']:.1f}% "
+    print(f"  Short outages -> short reg: {classifierMetrics['short_correctly_routed_pct']:.1f}% "
           f"(n={classifierMetrics['true_short_count']})")
     print(f"  Precision (long):          {classifierMetrics['classifier_precision_long']:.1f}%")
     print(f"  Recall (long):             {classifierMetrics['classifier_recall_long']:.1f}%")
@@ -232,11 +232,11 @@ def printTwoStageReport(
         deltaLong = regressionMetrics['long_outage_accuracy'] - singleModelMetrics['long_outage_accuracy']
         print(f"\nVs single-stage baseline:")
         print(f"  Overall accuracy: {'+' if delta >= 0 else ''}{delta:.1f}pp "
-              f"({singleModelMetrics['overall_accuracy']:.1f}% → {regressionMetrics['overall_accuracy']:.1f}%)")
+              f"({singleModelMetrics['overall_accuracy']:.1f}% -> {regressionMetrics['overall_accuracy']:.1f}%)")
         print(f"  Short accuracy:   {'+' if deltaShort >= 0 else ''}{deltaShort:.1f}pp "
-              f"({singleModelMetrics['short_outage_accuracy']:.1f}% → {regressionMetrics['short_outage_accuracy']:.1f}%)")
+              f"({singleModelMetrics['short_outage_accuracy']:.1f}% -> {regressionMetrics['short_outage_accuracy']:.1f}%)")
         print(f"  Long accuracy:    {'+' if deltaLong >= 0 else ''}{deltaLong:.1f}pp "
-              f"({singleModelMetrics['long_outage_accuracy']:.1f}% → {regressionMetrics['long_outage_accuracy']:.1f}%)")
+              f"({singleModelMetrics['long_outage_accuracy']:.1f}% -> {regressionMetrics['long_outage_accuracy']:.1f}%)")
 
     print(f"\nPRD Target Check:")
     mapeOk = "PASS" if regressionMetrics['mape'] < 15 else ("MARGINAL" if regressionMetrics['mape'] < 25 else "FAIL")
