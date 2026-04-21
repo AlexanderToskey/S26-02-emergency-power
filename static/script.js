@@ -442,7 +442,7 @@ function buildDaySelector(virginiaCounties, livePreds) {
         const btn = document.createElement("button");
         btn.className = "day-btn";
         btn.dataset.date = dateStr;
-        btn.textContent = i === 0 ? "Today" : `+${i}d`;
+        btn.textContent = i === 0 ? "Predicted" : `+${i}d`;
         btn.title = formatDateLabel(dateStr);
         btn.addEventListener("click", () => switchToDate(dateStr, virginiaCounties));
         bar.appendChild(btn);
