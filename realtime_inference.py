@@ -75,6 +75,8 @@ _MIN_SCOPE_CUSTOMERS = 50
 _occ_model:   Optional[OutageOccurrenceModel] = None
 _scope_model: Optional[TwoStageScopeModel]    = None
 _dur_model:   Optional[TwoStageOutageModel]   = None
+_scope_forecast: Optional[TwoStageScopeModel] = None
+_dur_forecast: Optional[TwoStageOutageModel] = None
 _geo:         Optional[pd.DataFrame]          = None   # county centroids (133 rows)
 _county_stats: Optional[pd.DataFrame]         = None   # precomputed county-level stats
 
@@ -92,6 +94,12 @@ _scope_explainer_classifier=None
 _duration_explainer_small=None
 _duration_explainer_large=None
 _duration_explainer_classifier=None
+_scope_forecast_explainer_small=None
+_scope_forecast_explainer_large=None
+_scope_forecast_explainer_classifier=None
+_duration_forecast_explainer_small=None
+_duration_forecast_explainer_large=None
+_duration_forecast_explainer_classifier=None
 
 _ae_model          = None   # Autoencoder, loaded in init()
 _ae_mean           = None
@@ -122,6 +130,8 @@ def init() -> bool:
         _occ_model   = OutageOccurrenceModel.load(MODELS_DIR / "occurrence_model.joblib")
         _scope_model = TwoStageScopeModel.load(MODELS_DIR / "scope_model.joblib")
         _dur_model   = TwoStageOutageModel.load(MODELS_DIR / "duration_model.joblib")
+        _scope_forecast = TwoStageScopeModel.load(MODELS_DIR / "scope_forecast.joblib")
+        _dur_forecast = TwoStageOutageModel.load(MODELS_DIR / "duration_forecast.joblib")
         print("[realtime] All three models loaded successfully.")
 
         # Build SHAP explainer for the occurrence model
@@ -129,6 +139,8 @@ def init() -> bool:
 
             global _occ_explainer, _scope_explainer_small, _scope_explainer_large, _scope_explainer_classifier
             global _duration_explainer_small, _duration_explainer_large, _duration_explainer_classifier
+            global _scope_forecast_explainer_small, _scope_forecast_explainer_large, _scope_forecast_explainer_classifier
+            global _duration_forecast_explainer_small, _scope_forecast_explainer_large, _scope_forecast_explainer_classifier
             _occ_explainer = shap.TreeExplainer(_occ_model.model)
             _scope_explainer_small = shap.TreeExplainer(_scope_model.shortRegressor)
             _scope_explainer_large = shap.TreeExplainer(_scope_model.longRegressor)
@@ -136,6 +148,12 @@ def init() -> bool:
             _duration_explainer_small = shap.TreeExplainer(_dur_model.shortRegressor)
             _duration_explainer_large = shap.TreeExplainer(_dur_model.longRegressor)
             _duration_explainer_classifier = shap.TreeExplainer(_dur_model.classifier)
+            _scope_forecast_explainer_small = shap.TreeExplainer(_scope_forecast.shortRegressor)
+            _scope_forecast_explainer_large = shap.TreeExplainer(_scope_forecast.longRegressor)
+            _scope_forecast_explainer_classifier = shap.TreeExplainer(_scope_forecast.classifier)
+            _duration_forecast_explainer_small = shap.TreeExplainer(_dur_forecast.shortRegressor)
+            _duration_forecast_explainer_large = shap.TreeExplainer(_dur_forecast.longRegressor)
+            _duration_forecast_explainer_classifier = shap.TreeExplainer(_dur_forecast.classifier)
             
             _EXPLAINER_NAMES = {
                 "_occ_explainer" : (_occ_explainer, _occ_model),
@@ -145,6 +163,12 @@ def init() -> bool:
                 "_duration_explainer_small" : (_duration_explainer_small, _dur_model),
                 "_duration_explainer_large" : (_duration_explainer_large, _dur_model),
                 "_duration_explainer_classifier" : (_duration_explainer_classifier, _dur_model),
+                "_scope_forecast_explainer_small" : (_scope_forecast_explainer_small, _scope_forecast),
+                "_scope_forecast_explainer_large" : (_scope_forecast_explainer_large, _scope_forecast),
+                "_scope_forecast_explainer_classifier" : (_scope_forecast_explainer_classifier, _scope_forecast),
+                "_duration_forecast_explainer_small" : (_duration_forecast_explainer_small, _dur_forecast),
+                "_duration_forecast_explainer_large" : (_duration_forecast_explainer_large, _dur_forecast),
+                "_duration_forecast_explainer_classifier" : (_duration_forecast_explainer_classifier, _dur_forecast),
             }
 
             
@@ -1164,17 +1188,20 @@ def run_forecast(days: int = 7) -> Dict[str, Any]:
             event_df["delta_customers_affected_15m"] = 0.0
             event_df["pct_growth_15m"]               = 0.0
             event_df["initial_impact_density"]       = 0.0
+            cols_to_drop = ["initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m",
+                            "initial_impact_density"]
+            event_df = event_df.drop(columns=cols_to_drop)
 
             event_flags_df = event_df.apply(_compute_event_flags, axis=1, result_type="expand")
             event_df = pd.concat([event_df, event_flags_df], axis=1)
             event_df["fips_code"] = pd.to_numeric(event_df["fips_code"], errors="coerce")
             event_df = event_df.apply(pd.to_numeric, errors="coerce").fillna(0)
 
-            X_scope = _align_features(event_df.copy(), _scope_model.featureNames)
-            scope_preds[occ_mask.values] = _scope_model.predict(X_scope)
+            X_scope = _align_features(event_df.copy(), _scope_forecast.featureNames)
+            scope_preds[occ_mask.values] = _scope_forecast.predict(X_scope)
 
-            X_dur = _align_features(event_df.copy(), _dur_model.featureNames)
-            dur_preds[occ_mask.values] = _dur_model.predict(X_dur)
+            X_dur = _align_features(event_df.copy(), _dur_forecast.featureNames)
+            dur_preds[occ_mask.values] = _dur_forecast.predict(X_dur)
 
         day_results: Dict[str, Any] = {}
         for i in day_df.index:
