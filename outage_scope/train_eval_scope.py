@@ -56,7 +56,7 @@ def main():
                 # "event_Tropical Storm":    int(gust > 33 and prcp > 25),
                 # "event_Wildfire":          0,
 
-    INCLUDE_DYNAMIC_FEATURES = True
+    INCLUDE_DYNAMIC_FEATURES = False
     # cols_to_drop = ['year', 'county_max_customers', 'initial_impact_density']
     cols_to_drop = ['year']
     cols_to_drop += ['event_Avalanche','event_Coastal Flood','event_Debris Flow','event_Drought',
@@ -158,7 +158,7 @@ def main():
     model_dir = Path("../models")
     model_dir.mkdir(parents=True, exist_ok=True)
     
-    model.save(model_dir / "scope_model.joblib")
+    model.save(model_dir / "scope_forecast.joblib")
 
     # --- 7. Explainer (Optional) ---
 

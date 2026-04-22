@@ -116,11 +116,11 @@ def main():
     cols_to_drop = ['year']
     cols_to_drop += ['event_Avalanche','event_Coastal Flood','event_Debris Flow','event_Drought',
                      'event_Funnel Cloud','event_Rip Current','event_Tornado','event_Wildfire']
-    cols_to_drop += ['event_None','county_median_duration','county_long_rate']
+    # cols_to_drop += ['event_None','county_median_duration','county_long_rate']
 
     if not INCLUDE_DYNAMIC_FEATURES:
         print("[!] GENERALIZATION MODE: Removing growth features.")
-        cols_to_drop += ["initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m", "initial_impact_density"]
+        cols_to_drop += ["initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m"]
 
     # cols_to_drop = []
     # cols_to_drop = X_full.columns
