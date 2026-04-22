@@ -728,3 +728,57 @@ body {
     font-weight: 600;
     margin-bottom: 14px;
 }
+
+/* --- Help Button --- */
+
+#help-button {
+    background: white;
+    border: none;
+    color: none;
+    font-weight: bold;
+    font-size: 20px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    right: 60px;
+    position: absolute;
+}
+
+#help-button:hover {
+    opacity: 0.75;
+    transform: scale(1.1);
+    transition: 0.2s ease;
+}
+
+/* Overlay (dark background) */
+#help-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+/* Hidden state */
+#help-overlay.hidden {
+    display: none;
+}
+
+/* Popup box */
+#help-popup {
+    background: white;
+    padding: 20px 25px;
+    border-radius: 10px;
+    max-width: 400px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+#help-popup h2 {
+    margin-top: 0;
+}

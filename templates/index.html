@@ -44,6 +44,10 @@
             Emergency Power Response Dashboard
         </div>
 
+        <button id="help-button" title="How to use">
+            ?
+        </button>
+
         <a id="github-link"
             href="https://github.com/AlexanderToskey/S26-02-emergency-power"
             target="_blank"
@@ -63,6 +67,21 @@
 
         </a>
 
+    </div>
+
+    <div id="help-overlay" class="hidden">
+        <div id="help-popup">
+            <h2>How to Use This Dashboard</h2>
+            <p>
+                • Hover over counties to see outage predictions.<br/>
+                • Click a county to view detailed analysis.<br/>
+                • Use the sidebar to quickly navigate counties.<br/>
+                • Switch between live and forecast days using the buttons.<br/>
+                • Colors indicate severity: yellow (minor), orange (moderate), red (severe).<br/><br/>
+                
+                Click anywhere to go back
+            </p>
+        </div>
     </div>
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>

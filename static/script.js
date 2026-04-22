@@ -484,3 +484,25 @@ document.getElementById("closePanel").addEventListener("click", () => {
     panel.classList.remove("visible");
     setTimeout(() => { map.invalidateSize(); }, 300);
 });
+
+// -- Help Button --
+
+const helpButton = document.getElementById("help-button");
+const helpOverlay = document.getElementById("help-overlay");
+const helpPopup = document.getElementById("help-popup");
+
+// Open popup
+helpButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    helpOverlay.classList.remove("hidden");
+});
+
+// Close when clicking outside popup
+helpOverlay.addEventListener("click", () => {
+    helpOverlay.classList.add("hidden");
+});
+
+// Prevent closing when clicking inside popup
+helpPopup.addEventListener("click", (e) => {
+    e.stopPropagation();
+});
