@@ -775,10 +775,20 @@ body {
     background: white;
     padding: 20px 25px;
     border-radius: 10px;
-    max-width: 400px;
+    max-width: 600px;
+    max-height: 80vh;      /* limits height to 80% of screen */
+    overflow-y: auto;      /* enables vertical scrolling */
     box-shadow: 0 4px 20px rgba(0,0,0,0.3);
 }
 
 #help-popup h2 {
     margin-top: 0;
+}
+
+.help-img {
+    width: 100%;
+    max-width: 350px;
+    border-radius: 6px;
+    margin: 10px 0 15px 0;
+    display: block;
 }
