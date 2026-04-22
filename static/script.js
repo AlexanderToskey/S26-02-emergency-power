@@ -28,7 +28,12 @@ function styleFunction(feature) {
     const anomalous = countyData && countyData.anomaly_flag;
 
     if (!countyData || !countyData.occurrence) {
-        return { color: anomalous ? "#7c3aed" : "#999", weight: anomalous ? 2 : 1, fillOpacity: 0.3 };
+        return {
+        color: anomalous ? "#7c3aed" : "#999", 
+        fillColor: "#999",
+        weight: anomalous ? 2 : 1, 
+        fillOpacity: 0.3
+            };
     }
 
     const borderColor = anomalous ? "#7c3aed" : "black";
@@ -48,10 +53,10 @@ function onEachFeature(feature, layer) {
     const fips = String(feature.properties.GEOID);
     const name = feature.properties.NAME;
     const displayName = formatCountyName(name, fips);
-    const data = predictions[fips];
 
     layer.on({
         mouseover: function () {
+            const data = predictions[fips];
             let props;
             const anomalyNote = (data && data.anomaly_flag) ? "<br/>⚠ Unusual weather pattern" : "";
 
@@ -77,6 +82,7 @@ function onEachFeature(feature, layer) {
         },
 
         click: function () {
+            const data = predictions[fips];
             showInfoPanel(name, fips, data);
         }
     });
@@ -141,9 +147,13 @@ function featureLabel(name) {
     return FEATURE_LABELS[name] || name.replace(/_/g, " ");
 }
 
-function renderExplainPanel(container, explainData) {
-    const occ  = explainData.occurrence;
-    const prob = Math.round((explainData.occ_prob || 0) * 100);
+function renderExplainPanel(container, explainData, currentDayData) {
+    const occ  = currentDayData ? currentDayData.occurrence : false;
+    const prob = Math.round(((currentDayData ? currentDayData.occ_prob : 0) || 0) * 100);
+    const scope = currentDayData ? currentDayData.scope : 0;
+    const duration = currentDayData ? currentDayData.duration : 0;
+
+
     const w    = explainData.weather || {};
     const shap = explainData.shap;
 
@@ -165,11 +175,11 @@ function renderExplainPanel(container, explainData) {
             <div class="pred-grid">
                 <div class="pred-item">
                     <span class="pred-label">Customers Affected</span>
-                    <span class="pred-value">${Math.round(explainData.scope).toLocaleString()}</span>
+                    <span class="pred-value">${Math.round(scope).toLocaleString()}</span>
                 </div>
                 <div class="pred-item">
                     <span class="pred-label">Est. Duration</span>
-                    <span class="pred-value">${explainData.duration} hrs</span>
+                    <span class="pred-value">${duration} hrs</span>
                 </div>
             </div>
         </div>` : "";
@@ -197,17 +207,21 @@ function renderExplainPanel(container, explainData) {
         </div>`;
 
     // ── Model analysis tabs ────────────────────────────────────────────────
+    const isLive = activeDateLabel === "Live";
+    const scopePrefix = isLive ? "_scope_explainer" : "_scope_forecast_explainer";
+    const durPrefix   = isLive ? "_duration_explainer" : "_duration_forecast_explainer";
+
     const tabsHtml = `
         <div class="panel-section model-tabs-section">
             <div class="panel-section-title">Model Analysis</div>
             <div class="model-tab-bar">
                 <button class="model-tab active" data-tab="_occ_explainer">Occurrence</button>
-                <button class="model-tab" data-tab="_scope_explainer_classifier">Scope Classifier</button>
-                <button class="model-tab" data-tab="_scope_explainer_small">Scope Small</button>
-                <button class="model-tab" data-tab="_scope_explainer_large">Scope Large</button>
-                <button class="model-tab" data-tab="_duration_explainer_classifier">Duration Classifier</button>
-                <button class="model-tab" data-tab="_duration_explainer_small">Duration Small</button>
-                <button class="model-tab" data-tab="_duration_explainer_large">Duration Large</button>
+                <button class="model-tab" data-tab="${scopePrefix}_classifier">Scope Classifier</button>
+                <button class="model-tab" data-tab="${scopePrefix}_small">Scope Small</button>
+                <button class="model-tab" data-tab="${scopePrefix}_large">Scope Large</button>
+                <button class="model-tab" data-tab="${durPrefix}_classifier">Duration Classifier</button>
+                <button class="model-tab" data-tab="${durPrefix}_small">Duration Small</button>
+                <button class="model-tab" data-tab="${durPrefix}_large">Duration Large</button>
             </div>
             <div id="shap-list-container">
                 </div>
@@ -313,7 +327,7 @@ function showInfoPanel(name, fips, _data) {
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             return r.json();
         })
-        .then(explainData => renderExplainPanel(details, explainData))
+        .then(explainData => renderExplainPanel(details, explainData, _data))
         .catch(() => {
             details.innerHTML = `<p style="color:#888">Could not load analysis for this county.</p>`;
         });
