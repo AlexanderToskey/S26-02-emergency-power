@@ -10,6 +10,7 @@ Public API:
     get_cached_predictions()  return last successful prediction result (thread-safe)
 """
 
+
 import sys
 import math
 import json
@@ -121,7 +122,7 @@ def init() -> bool:
     Returns True if everything loaded cleanly, False if any component failed
     (the pipeline will still run with degraded features).
     """
-    global _occ_model, _scope_model, _dur_model, _geo, _county_stats
+    global _occ_model, _scope_model, _dur_model, _scope_forecast, _dur_forecast, _geo, _county_stats
     global _EXPLAINER_NAMES
     ok = True
 
@@ -140,7 +141,7 @@ def init() -> bool:
             global _occ_explainer, _scope_explainer_small, _scope_explainer_large, _scope_explainer_classifier
             global _duration_explainer_small, _duration_explainer_large, _duration_explainer_classifier
             global _scope_forecast_explainer_small, _scope_forecast_explainer_large, _scope_forecast_explainer_classifier
-            global _duration_forecast_explainer_small, _scope_forecast_explainer_large, _scope_forecast_explainer_classifier
+            global _duration_forecast_explainer_small, _duration_forecast_explainer_large, _duration_forecast_explainer_classifier
             _occ_explainer = shap.TreeExplainer(_occ_model.model)
             _scope_explainer_small = shap.TreeExplainer(_scope_model.shortRegressor)
             _scope_explainer_large = shap.TreeExplainer(_scope_model.longRegressor)
@@ -982,6 +983,7 @@ def load_autoencoder(path=MODELS_DIR / "autoencoder.pt"):
     # Allow the numpy reconstruct function to unpickle properly
     with torch.serialization.safe_globals([np._core.multiarray._reconstruct]):
         checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+    # checkpoint = torch.load(path, map_location="cpu")
 
     input_dim = checkpoint["input_dim"]
     model = Autoencoder(input_dim=input_dim)
