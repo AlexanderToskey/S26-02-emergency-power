@@ -99,6 +99,12 @@ _EXPLAINER_NAMES = [
     "_duration_explainer_small",
     "_duration_explainer_large",
     "_duration_explainer_classifier",
+    "_scope_forecast_explainer_small",
+    "_scope_forecast_explainer_large",
+    "_scope_forecast_explainer_classifier",
+    "_duration_forecast_explainer_small",
+    "_duration_forecast_explainer_large",
+    "_duration_forecast_explainer_classifier",
 ]
 
 @app.route("/api/explain/<fips>")
@@ -143,6 +149,12 @@ def explain(fips):
         "_duration_explainer_small":    shap_data[4],
         "_duration_explainer_large":    shap_data[5],
         "_duration_explainer_classifier": shap_data[6],
+        "_scope_forecast_explainer_small": shap_data[7],
+        "_scope_forecast_explainer_large": shap_data[8],
+        "_scope_forecast_explainer_classifier": shap_data[9],
+        "_duration_forecast_explainer_small": shap_data[10],
+        "_duration_forecast_explainer_large": shap_data[11],
+        "_duration_forecast_explainer_classifier": shap_data[12],
     })
 
 
