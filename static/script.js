@@ -499,6 +499,47 @@ document.getElementById("closePanel").addEventListener("click", () => {
     setTimeout(() => { map.invalidateSize(); }, 300);
 });
 
+// ── Sidebar tabs ───────────────────────────────────────────────────────────────
+
+let logPollingInterval = null;
+
+function startLogPolling() {
+    function fetchLogs() {
+        fetch("/api/logs")
+            .then(r => r.json())
+            .then(lines => {
+                const console = document.getElementById("log-console");
+                if (!console) return;
+                const wasAtBottom = console.scrollHeight - console.scrollTop <= console.clientHeight + 5;
+                console.innerHTML = lines.map(l => `<div class="log-line">${escapeHtml(l)}</div>`).join("");
+                if (wasAtBottom) console.scrollTop = console.scrollHeight;
+            })
+            .catch(() => {});
+    }
+    fetchLogs();
+    logPollingInterval = setInterval(fetchLogs, 3000);
+}
+
+function stopLogPolling() {
+    if (logPollingInterval) { clearInterval(logPollingInterval); logPollingInterval = null; }
+}
+
+function escapeHtml(str) {
+    return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+document.querySelectorAll(".sidebar-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+        document.querySelectorAll(".sidebar-tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        const panel = tab.dataset.panel;
+        document.getElementById("panel-outages").classList.toggle("hidden", panel !== "outages");
+        document.getElementById("panel-logs").classList.toggle("hidden", panel !== "logs");
+        if (panel === "logs") startLogPolling();
+        else stopLogPolling();
+    });
+});
+
 // -- Help Button --
 
 const helpButton = document.getElementById("help-button");

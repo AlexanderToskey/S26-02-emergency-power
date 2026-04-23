@@ -14,19 +14,30 @@
 <body>
 
     <div id="sidebar">
-        <h3>Predicted Outages</h3>
 
-        <div id="day-selector"></div>
+        <div id="sidebar-tab-bar">
+            <button class="sidebar-tab active" data-panel="outages">Outages</button>
+            <button class="sidebar-tab" data-panel="logs">Logs</button>
+        </div>
 
-        <table id="outageTable">
-            <thead>
-                <tr>
-                    <th>County</th>
-                    <th>Severity</th>
-                </tr>
-            </thead>
-            <tbody id="outageList"></tbody>
-        </table>
+        <div id="panel-outages">
+            <h3>Predicted Outages</h3>
+            <div id="day-selector"></div>
+            <table id="outageTable">
+                <thead>
+                    <tr>
+                        <th>County</th>
+                        <th>Severity</th>
+                    </tr>
+                </thead>
+                <tbody id="outageList"></tbody>
+            </table>
+        </div>
+
+        <div id="panel-logs" class="hidden">
+            <h3>System Logs</h3>
+            <div id="log-console"></div>
+        </div>
 
     </div>
 
