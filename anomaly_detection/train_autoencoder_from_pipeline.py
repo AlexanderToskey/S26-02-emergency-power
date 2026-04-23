@@ -139,8 +139,8 @@ def main():
     torch.save({
         "model_state": model.state_dict(),
         "threshold": float(threshold),
-        "mean": mean,
-        "std": std,
+        "mean": torch.tensor(mean),
+        "std": torch.tensor(std),
         "input_dim": X_tensor.shape[1],
         "feature_columns": feature_cols,
     }, SAVE_PATH)

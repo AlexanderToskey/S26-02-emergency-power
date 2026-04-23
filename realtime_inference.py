@@ -64,7 +64,7 @@ _STORMCENTER_ID  = "9c691bb6-767e-4532-b00e-286ac9adc223"
 _VIEW_ID         = "38b5394c-8bca-4dfd-ac59-b321615446bd"
 
 # Maximum parallel threads for weather fetching — keep low to avoid rate-limiting
-_WEATHER_WORKERS = 6
+_WEATHER_WORKERS = 1
 _WEATHER_RETRIES = 3
 _WEATHER_RETRY_DELAY = 2.0  # seconds between retries
 
@@ -752,8 +752,28 @@ def run_inference() -> Dict[str, Any]:
             X_ae = _align_features(X_occ, _ae_feature_columns)
         else:
             X_ae = X_occ
+
+        if "year" in X_ae.columns:
+                X_ae["year"] = 2021
+
         X_occ_np = X_ae.values.astype(float)
         X_occ_norm = (X_occ_np - _ae_mean) / _ae_std
+
+        # --- DIAGNOSTIC PRINT BLOCK ---
+        print("\n--- AE DIAGNOSTICS ---")
+        print(f"Type of _ae_mean: {type(_ae_mean)}")
+        print(f"First 5 values of _ae_mean: {_ae_mean[:5]}")
+        print(f"First 5 values of _ae_std: {_ae_std[:5]}")
+        
+        # Check for invalid math (NaNs or Infinities)
+        invalid_count = np.sum(~np.isfinite(X_occ_norm))
+        print(f"Number of NaN/Inf values in X_occ_norm: {invalid_count}")
+        
+        if len(X_occ_norm) > 0:
+            print(f"First row of X_occ_norm (first 5 cols): {X_occ_norm[0][:5]}")
+        print("----------------------\n")
+        # ------------------------------
+
 
         # 2. Detect anomalies
         ae_errors, anomaly_flags = _ae_model.detect(X_occ_norm, _ae_threshold)
@@ -990,11 +1010,19 @@ def load_autoencoder(path=MODELS_DIR / "autoencoder.pt"):
     model.load_state_dict(checkpoint["model_state"])
     model.eval()
 
-    _ae_model = model
-    _ae_mean = checkpoint["mean"]
-    _ae_std = checkpoint["std"]
+    _ae_mean = np.array(checkpoint["mean"])
+    _ae_std = np.array(checkpoint["std"])
     _ae_threshold = checkpoint["threshold"]
     _ae_feature_columns = checkpoint.get("feature_columns")
+
+    _ae_model = model
+
+
+    if _ae_feature_columns:
+        print(f"[AE] Successfully loaded {len(_ae_feature_columns)} feature columns for alignment.")
+        print(_ae_feature_columns)
+    else:
+        print("[AE] ERROR: No feature_columns found in .pt file!")
 
     print(f"[AE] Loaded autoencoder from {path}, threshold={_ae_threshold:.6f}")
 
