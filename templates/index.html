@@ -44,6 +44,10 @@
             Emergency Power Response Dashboard
         </div>
 
+        <button id="log-button" title="Server logs">
+            &gt;_
+        </button>
+
         <button id="help-button" title="How to use">
             ?
         </button>
@@ -120,6 +124,22 @@
                 Click on the github icon in the top right to access the repository for this application.<br/><br/>
                 Click anywhere outside this menu to return.
             </p>
+        </div>
+    </div>
+
+    <div id="log-overlay" class="hidden">
+        <div id="log-popup">
+            <div id="log-popup-header">
+                <span>&gt;_ Server Logs</span>
+                <div id="log-popup-controls">
+                    <label id="log-autoscroll-label">
+                        <input type="checkbox" id="log-autoscroll" checked> Auto-scroll
+                    </label>
+                    <button id="log-clear-btn">Clear</button>
+                    <button id="log-close-btn">✕</button>
+                </div>
+            </div>
+            <div id="log-console"></div>
         </div>
     </div>
 

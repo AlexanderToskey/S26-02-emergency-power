@@ -729,6 +729,119 @@ body {
     margin-bottom: 14px;
 }
 
+/* --- Log Button --- */
+
+#log-button {
+    background: white;
+    border: none;
+    color: #1f2937;
+    font-weight: bold;
+    font-size: 13px;
+    font-family: monospace;
+    width: 36px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    right: 100px;
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: -1px;
+}
+
+#log-button:hover {
+    opacity: 0.75;
+    transform: scale(1.1);
+    transition: 0.2s ease;
+}
+
+/* --- Log Popup --- */
+
+#log-overlay {
+    position: fixed;
+    top: var(--header-height);
+    right: 20px;
+    z-index: 1999;
+}
+
+#log-overlay.hidden {
+    display: none;
+}
+
+#log-popup {
+    background: #1e1e1e;
+    border: 1px solid #444;
+    border-radius: 8px;
+    width: 560px;
+    max-width: calc(100vw - 40px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#log-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #2d2d2d;
+    padding: 8px 12px;
+    color: #a0a0a0;
+    font-family: monospace;
+    font-size: 13px;
+    border-bottom: 1px solid #444;
+    flex-shrink: 0;
+}
+
+#log-popup-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#log-autoscroll-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: #888;
+    cursor: pointer;
+}
+
+#log-clear-btn, #log-close-btn {
+    background: #444;
+    border: none;
+    color: #ccc;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+#log-clear-btn:hover, #log-close-btn:hover {
+    background: #555;
+    color: white;
+}
+
+#log-console {
+    font-family: monospace;
+    font-size: 12px;
+    color: #d4d4d4;
+    background: #1e1e1e;
+    padding: 10px 12px;
+    height: 340px;
+    overflow-y: auto;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.log-line { display: block; }
+.log-line.warn  { color: #fbbf24; }
+.log-line.error { color: #f87171; }
+.log-line.ok    { color: #4ade80; }
+
 /* --- Help Button --- */
 
 #help-button {

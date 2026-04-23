@@ -1,12 +1,38 @@
 from flask import Flask, render_template, jsonify, request
+import collections
 import json
 import os
+import sys
 import threading
 import time
 
 import realtime_inference
 
 app = Flask(__name__)
+
+# ── Log capture ────────────────────────────────────────────────────────────────
+
+_log_buffer: collections.deque = collections.deque(maxlen=500)
+_log_lock = threading.Lock()
+
+class _TeeStream:
+    """Writes to the original stdout and appends each line to _log_buffer."""
+    def __init__(self, original):
+        self._original = original
+
+    def write(self, data):
+        self._original.write(data)
+        if data and data != "\n":
+            with _log_lock:
+                _log_buffer.append(data.rstrip("\n"))
+
+    def flush(self):
+        self._original.flush()
+
+    def __getattr__(self, name):
+        return getattr(self._original, name)
+
+sys.stdout = _TeeStream(sys.stdout)
 
 #  Startup: load models and run first inference
 
@@ -176,6 +202,14 @@ def forecast():
     if not data:
         return jsonify({"error": "Forecast not yet available. Try again shortly."}), 503
     return jsonify(data)
+
+
+@app.route("/api/logs")
+def logs():
+    """Returns the last N server log lines."""
+    with _log_lock:
+        lines = list(_log_buffer)
+    return jsonify({"lines": lines})
 
 
 @app.route("/api/status")

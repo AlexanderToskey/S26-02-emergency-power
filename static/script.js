@@ -502,6 +502,89 @@ document.getElementById("closePanel").addEventListener("click", () => {
     setTimeout(() => { map.invalidateSize(); }, 300);
 });
 
+// -- Log Popup --
+
+(function () {
+    const logBtn     = document.getElementById("log-button");
+    const logOverlay = document.getElementById("log-overlay");
+    const logConsole = document.getElementById("log-console");
+    const closeBtn   = document.getElementById("log-close-btn");
+    const clearBtn   = document.getElementById("log-clear-btn");
+    const autoScroll = document.getElementById("log-autoscroll");
+
+    let pollTimer = null;
+    let cleared   = 0;  // index: skip lines already dismissed via Clear
+
+    function escapeHtml(s) {
+        return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    function lineClass(text) {
+        const t = text.toLowerCase();
+        if (t.includes("error") || t.includes("traceback") || t.includes("exception")) return "error";
+        if (t.includes("warning") || t.includes("warn"))  return "warn";
+        if (t.includes("done") || t.includes("success") || t.includes("loaded")) return "ok";
+        return "";
+    }
+
+    function fetchLogs() {
+        fetch("/api/logs")
+            .then(r => r.json())
+            .then(data => {
+                const lines = (data.lines || []).slice(cleared);
+                if (lines.length === 0) return;
+                lines.forEach(line => {
+                    const span = document.createElement("span");
+                    span.className = "log-line " + lineClass(line);
+                    span.innerHTML = escapeHtml(line);
+                    logConsole.appendChild(span);
+                });
+                if (autoScroll.checked) logConsole.scrollTop = logConsole.scrollHeight;
+            })
+            .catch(() => {});
+    }
+
+    function openLog() {
+        logOverlay.classList.remove("hidden");
+        logConsole.innerHTML = "";
+        fetch("/api/logs")
+            .then(r => r.json())
+            .then(data => {
+                cleared = 0;
+                const lines = data.lines || [];
+                lines.forEach(line => {
+                    const span = document.createElement("span");
+                    span.className = "log-line " + lineClass(line);
+                    span.innerHTML = escapeHtml(line);
+                    logConsole.appendChild(span);
+                });
+                logConsole.scrollTop = logConsole.scrollHeight;
+            })
+            .catch(() => {});
+        pollTimer = setInterval(fetchLogs, 2000);
+    }
+
+    function closeLog() {
+        logOverlay.classList.add("hidden");
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
+
+    logBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (logOverlay.classList.contains("hidden")) openLog(); else closeLog();
+    });
+
+    closeBtn.addEventListener("click", closeLog);
+
+    clearBtn.addEventListener("click", () => {
+        fetch("/api/logs").then(r => r.json()).then(data => {
+            cleared = (data.lines || []).length;
+            logConsole.innerHTML = "";
+        }).catch(() => {});
+    });
+})();
+
 // -- Help Button --
 
 const helpButton = document.getElementById("help-button");
