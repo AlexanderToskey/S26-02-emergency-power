@@ -158,6 +158,7 @@ def prepare_features(
             "tmax_c",
             "tmin_c",
             "awnd_ms",
+            "wsfg_ms",
             "wt_fog",
             "wt_thunder",
             "wt_ice",

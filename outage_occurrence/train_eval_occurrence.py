@@ -44,7 +44,7 @@ def main():
     # STEP 3: Load daily weather
     # ------------------------------------------------------------------
     print("Loading GHCN-Daily weather data...")
-    ghcnd = load_ghcnd_weather(data_dir / "ghcnd_va_daily.csv")
+    ghcnd = load_ghcnd_weather(data_dir / "openmeteo_va_historical.csv")
 
     # ------------------------------------------------------------------
     # STEP 4: Merge labels with weather
@@ -75,19 +75,19 @@ def main():
         X = X.drop(columns=["year"])
 
 
-    print("\nExporting a small sample of the preprocessed data...")
+    # print("\nExporting a small sample of the preprocessed data...")
     
-    # Recombine features (X) and target (y) so they are in one file
-    sample_export = X.copy()
-    sample_export['target_occurrence'] = y
+    # # Recombine features (X) and target (y) so they are in one file
+    # sample_export = X.copy()
+    # sample_export['target_occurrence'] = y
     
-    # Grab a random sample of 100 rows
-    small_sample = sample_export.sample(n=100, random_state=42)
+    # # Grab a random sample of 100 rows
+    # small_sample = sample_export.sample(n=100, random_state=42)
     
-    # Save it to the data directory
-    sample_path = data_dir / "preprocessed_sample_occurrence.csv"
-    small_sample.to_csv(sample_path, index=False)
-    print(f"Saved 100 sample rows to {sample_path}")
+    # # Save it to the data directory
+    # sample_path = data_dir / "preprocessed_sample_occurrence.csv"
+    # small_sample.to_csv(sample_path, index=False)
+    # print(f"Saved 100 sample rows to {sample_path}")
     # ---------------------------------------
 
     # ------------------------------------------------------------------
@@ -113,8 +113,6 @@ def main():
     # Occurrence models usually support class_weight or scale_pos_weight
     model.train(X_train, y_train)
 
-    # NEW: Tune threshold using test set
-    model.tune_threshold(X_test, y_test)
 
     # ------------------------------------------------------------------
     # STEP 8: Evaluate
@@ -132,8 +130,8 @@ def main():
     # ------------------------------------------------------------------
     print("\nSaving occurrence model...")
     model_dir.mkdir(parents=True, exist_ok=True)
-    #model.save(model_dir / "occurrence_model.joblib")
-    model.save(model_dir / "occurrence_ensemble.joblib")    # NEW: Save ensemble model instead
+    model.save(model_dir / "occurrence_model.joblib")
+    # model.save(model_dir / "occurrence_ensemble.joblib")    # NEW: Save ensemble model instead
     print(f"Saved to {model_dir / 'occurrence_model.joblib'}")
 
     # ------------------------------------------------------------------

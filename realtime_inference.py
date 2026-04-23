@@ -749,9 +749,10 @@ def run_inference() -> Dict[str, Any]:
     if _ae_model is not None:
         # 1. Select only the features the autoencoder was trained on, then normalize
         if _ae_feature_columns is not None:
-            X_ae = _align_features(X_occ, _ae_feature_columns)
+            X_ae = _align_features(occ_df.copy(), _ae_feature_columns)
+            # X_ae = X_ae.apply(pd.to_numeric, errors="coerce").fillna(0)
         else:
-            X_ae = X_occ
+            X_ae = occ_df
 
         if "year" in X_ae.columns:
                 X_ae["year"] = 2021
