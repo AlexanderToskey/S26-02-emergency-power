@@ -72,14 +72,53 @@
     <div id="help-overlay" class="hidden">
         <div id="help-popup">
             <h2>How to Use This Dashboard</h2>
+            <h3>Switching between nowcasting and forecasting</h3>
             <p>
-                • Hover over counties to see outage predictions.<br/>
-                • Click a county to view detailed analysis.<br/>
-                • Use the sidebar to quickly navigate counties.<br/>
-                • Switch between live and forecast days using the buttons.<br/>
-                • Colors indicate severity: yellow (minor), orange (moderate), red (severe).<br/><br/>
-                
-                Click anywhere to go back
+                Select one of the buttons in the top right corner<br/>
+                • Live: Current weather data<br/>
+                • Predicted: Average weather data today<br/>
+                • +1d, +2d, ..., +6d: Average weather data over the next week</br>
+            </p>
+            <img src="{{ url_for('static', filename='images/ForecastingButtons.png') }}" class="help-img">
+
+            <h3>Viewing Outage Predictions</h3>
+            <p>
+                Use the panel on the left to see the current outage severity predictions.<br/>
+                Colors indicate severity:<br/>
+                • Yellow (minor)<br/>
+                • Orange (moderate)<br/>
+                • Red (severe).<br/>
+                Click on a county to zoom into it on the map and display the detailed prediction and feature importance panel on the right.<br/>
+            </p>
+            <img src="{{ url_for('static', filename='images/LeftPanel.png') }}" class="help-img">
+
+            <h3>Viewing Detailed Predictions and Feature Importance</h3>
+            <p>
+                On the feature importance panel you can view the predicted probability for a given county.
+                You can also view the predicted scope and duration for that county.<br/>
+            </p>
+            <img src="{{ url_for('static', filename='Images/WeatherData.png') }}" class="help-img">
+
+            <p>
+                Below the weather inputs is the model analysis and feature importance.
+                Select one of the models to view the feature importance for that model.<br/> 
+                • High positive values indicate a strong positive impact for the model (e.g. +0.93).<br/>
+                • High negative values indicate a strong negative impact (e.g. -1.52).<br/>
+                • Values close to 0 have little impact.
+            </p>
+            <img src="{{ url_for('static', filename='Images/FeatureImportance.png') }}" class="help-img">
+
+            <h3>Interacting with the Map</h3>
+            <p>
+                Click on a county to zoom into it on the map and display the feature importance panel on the right.<br/>
+                Hover over a county to see the scope and duration predictions.
+            </p>
+            <img src="{{ url_for('static', filename='Images/Map.png') }}" class="help-img">
+
+            <h3>Additional Information</h3>
+            <p>
+                Click on the github icon in the top right to access the repository for this application.<br/><br/>
+                Click anywhere outside this menu to return.
             </p>
         </div>
     </div>
