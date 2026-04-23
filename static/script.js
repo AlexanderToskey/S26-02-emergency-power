@@ -9,6 +9,7 @@ let predictions = {};
 let geojson;
 let forecastData = {};   // { date_str: { fips: {...} } }
 let activeDateLabel = "Live";
+let activeDateStr = "Live";
 
 function formatCountyName(name, fips) {
     const countyCode = parseInt(fips.slice(2));
@@ -322,7 +323,7 @@ function showInfoPanel(name, fips, _data) {
     panel.classList.add("visible");
     setTimeout(() => { map.invalidateSize(); }, 300);
 
-    fetch(`/api/explain/${fips}`)
+    fetch(`/api/explain/${fips}?date=${activeDateStr}`)
         .then(r => {
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             return r.json();
@@ -414,6 +415,7 @@ function formatDateLabel(dateStr) {
 function switchToDate(dateStr, virginiaCounties) {
     predictions = forecastData[dateStr] || {};
     activeDateLabel = formatDateLabel(dateStr);
+    activeDateStr = dateStr;
     geojson.setStyle(styleFunction);
     geojson.eachLayer(layer => {
         const fips = String(layer.feature.properties.GEOID);
@@ -427,6 +429,7 @@ function switchToDate(dateStr, virginiaCounties) {
 function switchToLive(livePreds, virginiaCounties) {
     predictions = livePreds;
     activeDateLabel = "Live";
+    activeDateStr = "Live";
     geojson.setStyle(styleFunction);
     geojson.eachLayer(layer => {
         const fips = String(layer.feature.properties.GEOID);

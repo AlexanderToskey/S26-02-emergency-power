@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 import json
 import os
 import threading
@@ -118,23 +118,31 @@ def explain(fips):
           shap:    { base_value, features: [{name, value, shap}, ...] } }
     """
 
+    date_str = request.args.get('date', 'Live')
 
-
-    pred = realtime_inference.get_cached_predictions().get(fips)
+    
+    if date_str == "Live":
+        pred = realtime_inference.get_cached_predictions().get(fips)
+    else:
+        # Look inside the forecast cache for that specific date
+        forecast = realtime_inference.get_cached_forecast()
+        pred = forecast.get(date_str, {}).get(fips)
     if pred is None:
         return jsonify({"error": "No prediction cached for this county."}), 404
 
-    features = realtime_inference.get_features_for_fips(fips)
+    features = realtime_inference.get_features_for_fips(fips, date_str=date_str)
     if not features:
         return jsonify({"error": "No features cached for this county."}), 404
 
     shap_data = []
 
     for model in _EXPLAINER_NAMES:
-        shap_data += [realtime_inference.compute_shap_for_fips(fips, explainer_name=model)]
+        # print(f"\n[DEBUG Outage_app.py] Attempting SHAP for model: {model} | Date: {date_str}")
+        shap_data += [realtime_inference.compute_shap_for_fips(fips, explainer_name=model, date_str=date_str)]
 
     return jsonify({
         "fips":         fips,
+        "date_str":     date_str,
         "occurrence":   pred["occurrence"],
         "occ_prob":     pred["occ_prob"],
         "scope":        pred["scope"],

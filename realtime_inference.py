@@ -64,7 +64,7 @@ _STORMCENTER_ID  = "9c691bb6-767e-4532-b00e-286ac9adc223"
 _VIEW_ID         = "38b5394c-8bca-4dfd-ac59-b321615446bd"
 
 # Maximum parallel threads for weather fetching — keep low to avoid rate-limiting
-_WEATHER_WORKERS = 1
+_WEATHER_WORKERS = 6
 _WEATHER_RETRIES = 3
 _WEATHER_RETRY_DELAY = 2.0  # seconds between retries
 
@@ -85,7 +85,7 @@ _prev_kubra:      Dict[str, float]  = {}     # fips_code -> customers (last poll
 _prev_kubra_time: Optional[datetime] = None
 
 _cached_predictions: Dict[str, Any] = {}
-_cached_features:    Dict[str, Any] = {}   # fips -> {weather, model_row} for explain endpoint
+_cached_features:    Dict[str, Dict[str, Any]] = {"Live": {}}   # fips -> {weather, model_row} for explain endpoint
 _last_updated:       Optional[str]  = None
 _cache_lock = threading.Lock()
 _occ_explainer = None   # shap.TreeExplainer, initialized in init()
@@ -879,7 +879,8 @@ def run_inference() -> Dict[str, Any]:
             "model_row": model_row,
         }
     with _cache_lock:
-        _cached_features.update(new_features)
+        # _cached_features.update(new_features)
+        _cached_features["Live"] = new_features
 
 
     results: Dict[str, Any] = {}
@@ -925,13 +926,14 @@ def get_last_updated() -> Optional[str]:
         return _last_updated
 
 
-def get_features_for_fips(fips: str) -> Optional[dict]:
+def get_features_for_fips(fips: str, date_str: str = "Live") -> Optional[dict]:
     """Return the cached {weather, model_row} dict for a county (thread-safe)."""
     with _cache_lock:
-        return _cached_features.get(fips)
+        target_cache = _cached_features.get(date_str, {})
+        return target_cache.get(fips)
 
 
-def compute_shap_for_fips(fips: str, explainer_name: str) -> Optional[dict]:
+def compute_shap_for_fips(fips: str, explainer_name: str, date_str: str = "Live") -> Optional[dict]:
     """
     Compute SHAP values for the occurrence model prediction for one county.
     Returns the top-10 features by absolute SHAP value, plus the base value.
@@ -947,9 +949,27 @@ def compute_shap_for_fips(fips: str, explainer_name: str) -> Optional[dict]:
     if explainer is None or model is None:
         return None
 
-    features = get_features_for_fips(fips)
+    features = get_features_for_fips(fips, date_str)
     if not features:
         return None
+    
+
+    model_row     = features["model_row"]
+    
+    # print(f"[SHAP] Checking {explainer_name} for {date_str}")
+    # missing = [f for f in feature_names if f not in model_row]
+    # if missing:
+    #     print(f"[SHAP] Skipping {explainer_name}: missing {len(missing)} features (e.g., {missing[0]})")
+    missing_features = [f for f in feature_names if f not in model_row]
+    if missing_features:
+        return None
+
+    # print(f"--- SHAP DEBUG START ---")
+    # print(f"Explainer: {explainer_name} | Date: {date_str}")
+    # print(f"Available keys in model_row: {list(model_row.keys())}")
+    # print(f"Features model expects: {feature_names}")
+
+
 
     X_row = pd.DataFrame([features["model_row"]])[feature_names]
     shap_vals = explainer.shap_values(X_row)
@@ -967,7 +987,10 @@ def compute_shap_for_fips(fips: str, explainer_name: str) -> Optional[dict]:
     else:
         base_value = float(base_value)
 
-    model_row     = features["model_row"]
+
+
+
+
 
     # Normalize shap values
     sv = np.array(sv).astype(float).flatten()
@@ -1124,6 +1147,10 @@ def run_forecast(days: int = 7) -> Dict[str, Any]:
     initial_customers_affected and related features default to 0.
     """
     global _cached_forecast
+    global _cached_features
+    global _cache_lock
+
+
 
     if _occ_model is None:
         print("[forecast] Models not loaded.")
@@ -1232,6 +1259,29 @@ def run_forecast(days: int = 7) -> Dict[str, Any]:
 
             X_dur = _align_features(event_df.copy(), _dur_forecast.featureNames)
             dur_preds[occ_mask.values] = _dur_forecast.predict(X_dur)
+
+            day_features = {}
+            _weather_display_cols = [
+                "tmax_c", "tmin_c", "awnd_ms", "wsfg_ms", "prcp_mm", "snow_mm", "snwd_mm",
+                "wt_thunder", "wt_fog", "wt_snow", "wt_freezing_rain",
+                "wt_ice", "wt_blowing_snow", "wt_drizzle", "wt_rain", "has_weather_event",
+            ]
+            for i in day_df.index:
+                    fips = str(day_df.at[i, "fips_code"])
+                    # Build the model_row exactly like run_inference does
+                    model_row = {col: float(X_occ.at[i, col]) for col in X_occ.columns}
+                    # Add forecast-specific features
+                    for col in _scope_forecast.featureNames + _dur_forecast.featureNames:
+                        if col not in model_row:
+                            model_row[col] = float(day_df.at[i, col]) if col in day_df.columns else 0.0
+                    
+                    day_features[fips] = {
+                        "weather": {k: float(day_df.at[i, k]) for k in _weather_display_cols if k in day_df.columns},
+                        "model_row": model_row
+                    }
+                
+            with _cache_lock:
+                _cached_features[date_str] = day_features
 
         day_results: Dict[str, Any] = {}
         for i in day_df.index:
