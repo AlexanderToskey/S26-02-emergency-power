@@ -309,8 +309,13 @@ function renderExplainPanel(container, explainData, currentDayData) {
     });
 }
 
+let activeCounty = null;  // { name, fips }
+
 // Opens the right-side panel and fetches live explain data for the county
 function showInfoPanel(name, fips, _data) {
+
+    activeCounty = { name, fips };  // 👈 track selection
+    
     const panel   = document.getElementById("infoPanel");
     const title   = document.getElementById("countyName");
     const details = document.getElementById("countyDetails");
@@ -332,6 +337,15 @@ function showInfoPanel(name, fips, _data) {
         .catch(() => {
             details.innerHTML = `<p style="color:#888">Could not load analysis for this county.</p>`;
         });
+}
+
+function refreshInfoPanel() {
+    if (!activeCounty) return;
+
+    const { name, fips } = activeCounty;
+    const data = predictions[fips];  // new data for current date
+
+    showInfoPanel(name, fips, data);
 }
 
 // ── Sidebar population ─────────────────────────────────────────────────────────
@@ -422,6 +436,9 @@ function switchToDate(dateStr, virginiaCounties) {
         if (predictions[fips] && predictions[fips].occurrence) layer.bringToFront();
     });
     populateSidebar(virginiaCounties);
+
+    refreshInfoPanel();
+
     document.querySelectorAll(".day-btn").forEach(b => b.classList.remove("active"));
     document.querySelector(`.day-btn[data-date="${dateStr}"]`)?.classList.add("active");
 }
@@ -436,6 +453,9 @@ function switchToLive(livePreds, virginiaCounties) {
         if (predictions[fips] && predictions[fips].occurrence) layer.bringToFront();
     });
     populateSidebar(virginiaCounties);
+
+    refreshInfoPanel();
+    
     document.querySelectorAll(".day-btn").forEach(b => b.classList.remove("active"));
     document.getElementById("btn-live")?.classList.add("active");
 }
