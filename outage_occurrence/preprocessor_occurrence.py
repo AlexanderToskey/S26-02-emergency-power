@@ -152,6 +152,8 @@ def prepare_features(
             "month",
             "day",
             "dayofweek",
+            "dayofyear",
+            "is_weekend",
             "prcp_mm",
             "snow_mm",
             "snwd_mm",

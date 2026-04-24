@@ -44,7 +44,7 @@ def main():
     # STEP 3: Load daily weather
     # ------------------------------------------------------------------
     print("Loading GHCN-Daily weather data...")
-    ghcnd = load_ghcnd_weather(data_dir / "ghcnd_va_daily.csv")
+    ghcnd = load_ghcnd_weather(data_dir / "openmeteo_va_historical.csv")
 
     # ------------------------------------------------------------------
     # STEP 4: Merge labels with weather
@@ -114,7 +114,7 @@ def main():
     model.train(X_train, y_train)
 
     # NEW: Tune threshold using test set
-    model.tune_threshold(X_test, y_test)
+    # model.tune_threshold(X_test, y_test)
 
     # ------------------------------------------------------------------
     # STEP 8: Evaluate
@@ -122,7 +122,7 @@ def main():
     print("Evaluating...")
     #y_prob = model.predict(X_test)[:, 1]
     preds, y_prob = model.predict(X_test)
-    y_pred = (y_prob >= 0.5).astype(int)
+    y_pred = (y_prob >= 0.25).astype(int)
 
     metrics = evaluateModel(y_test.values, y_pred, y_prob)
     printEvaluationReport(metrics)
@@ -132,17 +132,17 @@ def main():
     # ------------------------------------------------------------------
     print("\nSaving occurrence model...")
     model_dir.mkdir(parents=True, exist_ok=True)
-    #model.save(model_dir / "occurrence_model.joblib")
-    model.save(model_dir / "occurrence_ensemble.joblib")    # NEW: Save ensemble model instead
+    model.save(model_dir / "occurrence_model.joblib")
+    # model.save(model_dir / "occurrence_ensemble.joblib")    # NEW: Save ensemble model instead
     print(f"Saved to {model_dir / 'occurrence_model.joblib'}")
 
     # ------------------------------------------------------------------
     # STEP 9: Feature importance
     # ------------------------------------------------------------------
-    #print("\nTop feature importances:")
-    #importances = model.getFeatureImportances()
+    # print("\nTop feature importances:")
+    # importances = model.getFeatureImportances()
 
-    #for k, v in sorted(importances.items(), key=lambda x: x[1], reverse=True)[:15]:
+    # for k, v in sorted(importances.items(), key=lambda x: x[1], reverse=True)[:15]:
     #    print(f"{k:30s} {v:.4f}")
 
     # ------------------------------------------------------------------

@@ -53,7 +53,7 @@ def main():
     # =========================================================================
     print("\n[1] Loading Serialized Models from /models...")
     try:
-        occ_model = OutageOccurrenceModel.load(models_dir / "occurrence_ensemble.joblib")
+        occ_model = OutageOccurrenceModel.load(models_dir / "occurrence_model.joblib")
         scope_model = TwoStageScopeModel.load(models_dir / "scope_model.joblib")
         dur_model = TwoStageOutageModel.load(models_dir / "duration_model.joblib")
         print("  -> Models loaded successfully.")
@@ -75,7 +75,7 @@ def main():
     # Occurrence dataset
     print("\n--- Building Occurrence (County-Day) Dataset ---")
     #print(outages.columns)
-    occurrence_labels = build_occurrence_labels(outages, min_customers=100)
+    occurrence_labels = build_occurrence_labels(outages, min_customers=50)
     merged_occ = merge_occurrence_with_weather(occurrence_labels, ghcnd)
 
     # Merge county historical stats so occurrence model features match training

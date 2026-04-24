@@ -100,7 +100,7 @@ def merge_occurrence_with_weather(
 
     return merged
 
-def build_occurrence_labels(outages_df: pd.DataFrame, min_customers: int = 100) -> pd.DataFrame:
+def build_occurrence_labels(outages_df: pd.DataFrame, min_customers: int = 50) -> pd.DataFrame:
     """
     Convert raw EAGLE-I outage snapshots into county-day binary occurrence labels.
 
