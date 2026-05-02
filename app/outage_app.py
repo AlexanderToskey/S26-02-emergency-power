@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'inference'))
 import realtime_inference
 
 app = Flask(__name__)

@@ -20,11 +20,11 @@ from pathlib import Path
 
 import pandas as pd
 
-DATA_DIR = Path("data")
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
 OUTPUT   = DATA_DIR / "county_stats.csv"
 
-sys.path.insert(0, ".")
-sys.path.insert(0, "outage_duration")
+sys.path.insert(0, str(BASE_DIR))
 
 from outage_duration.src.data_loader   import load_eagle_outages
 from outage_duration.src.preprocessor  import (

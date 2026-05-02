@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 GEO_FILE = DATA_DIR / "virginia_geo.csv"
 OUTPUT_FILE = DATA_DIR / "openmeteo_va_historical.csv"

@@ -30,7 +30,7 @@ import pandas as pd
 import torch
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
-BASE_DIR   = Path(__file__).resolve().parent
+BASE_DIR   = Path(__file__).resolve().parent.parent
 MODELS_DIR = BASE_DIR / "models"
 DATA_DIR   = BASE_DIR / "data"
 GEO_FILE   = DATA_DIR / "virginia_geo.csv"

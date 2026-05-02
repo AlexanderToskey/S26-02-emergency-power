@@ -1,6 +1,9 @@
 
+import sys
 from pathlib import Path
 from sklearn.model_selection import train_test_split
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from outage_occurrence.data_loader_occurrence import (
     load_eagle_outages,
@@ -17,7 +20,7 @@ from sklearn.ensemble import IsolationForest
 
 def main():
     # Get the base directory and get the data and model directories
-    BASE_DIR = Path(__file__).resolve().parent
+    BASE_DIR = Path(__file__).resolve().parent.parent
     data_dir = BASE_DIR / "data"
     model_dir = BASE_DIR / "models"
 

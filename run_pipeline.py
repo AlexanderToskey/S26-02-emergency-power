@@ -53,7 +53,7 @@ def main():
     # =========================================================================
     print("\n[1] Loading Serialized Models from /models...")
     try:
-        occ_model = OutageOccurrenceModel.load(models_dir / "occurrence_ensemble.joblib")
+        occ_model = OutageOccurrenceModel.load(models_dir / "occurrence_model.joblib")
         scope_model = TwoStageScopeModel.load(models_dir / "scope_model.joblib")
         dur_model = TwoStageOutageModel.load(models_dir / "duration_model.joblib")
         print("  -> Models loaded successfully.")
