@@ -1,4 +1,4 @@
-# AI Predictive System for Emergency Power Response
+# AI System for Emergency Power Management
 
 This is a multi-stage machine learning system designed to predict power outage information at the county level in Virginia. By combining historical outage data with real-time weather inputs, the system estimates the likelihood of an outage occurring, the outage's expected scope (number of customers affected), and the expected duration (time the outage lasts), which are then presented through an interactive dashboard. During severe weather events, utilities can struggle to maintain reliable electrical service due to demand surges and grid equipment failures. ​This machine learning system provides utilities with useful outage insights so they can be better prepared to respond to grid failures due to extreme weather.   
 
@@ -66,7 +66,23 @@ python duration/train_eval.py                    # Duration
 
 ## Using the Dashboard
 
+<img src="app/static/Images/Dashboard.png" alt="Map image">
 
+### Left Panel
+
+The left panel contains the nowcasting/forecasting buttons which let the user choose how far into the future they want to predict outages, and a list of all counties in Virginia. Counties at the top of the list are those which have an outage being predicted, and counties grayed out indicate no outage is being predicted. The severity (color) is based on the scope estimation: <1000 customers affected is classified as a minor outage (yellow), 1000-5000 customers is classified as a moderate outage (orange), and >5000 customers is classified as a severe outage (red). Clicking on a county will zoom into it and bring up the feature importance panel.  
+
+### Map
+
+The center contains a map of every Virginia county and independent city. Hovering over a county shows the county's name along with the scope and duration predictions. The map corresponds to the county list on the left and the colors have the same meaning. Clicking on a county will bring up the feature importance panel.
+
+### Right Panel
+
+The right panel contains additional information about the selected county including the probability that an outage will occur, any anomalies detected, and current/forecasted weather information. Most importantly it contains the feature importance values for all models in the pipeline. The user can selected which model's SHAP values are displayed by selecting that model from the list of buttons.
+
+### Other Buttons
+
+In the top right are some additional buttons. The button on the left opens a console interface which displays updated real-time weather data fetching information, the question mark button opens a simple help menu for navigating the dashboard, and the GitHub button directs to the project's GitHub repository.
 
 ### Additional Information
 
@@ -178,7 +194,7 @@ S26-02-emergency-power/
 
 At this time, all APIs used are free and public.
 
-We'd like to thank our sponsor Dr. Christiana Garcia and our subject matter experts Sadman Saif and Mohammadreza Saghafi their support during this project.
+We'd like to thank our sponsor Dr. Christiana Garcia and our subject matter experts Sadman Saif and Mohammadreza Saghafi for their support during this project.
 
 ## Useful Resources
 
