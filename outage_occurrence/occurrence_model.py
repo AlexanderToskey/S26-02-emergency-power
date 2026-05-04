@@ -1,4 +1,6 @@
-
+#Stacking ensemble for binary outage occurrence prediction
+#XGBoost, RandomForest, and GradientBoosting feed into a LogisticRegression meta-learner
+#Threshold is tuned to maximize F2 score to prioritize recall
 # Imports
 import xgboost as xgb
 import pandas as pd
@@ -15,8 +17,7 @@ class OutageOccurrenceModel:
 
     def __init__(self, model_params: Optional[Dict[str, Any]]=None):
 
-        # Default parameters for the XGBoost model in case custom
-        # parameters aren't set
+        #Default parameters for the XGBoost model in case custom
         default_params = {
             "objective": "binary:logistic",
             "eval_metric": "logloss",
@@ -26,14 +27,14 @@ class OutageOccurrenceModel:
             "subsample": 0.8,
             "colsample_bytree": 0.8,
             "random_state": 42,
-            # ~8:1 negative:positive ratio at >=100 customer threshold
+            #roughly matches the 8:1 negative:positive ratio at the >=100 customer threshold
             "scale_pos_weight": 10,
         }
 
-        # XGBoost model
+        #XGBoost model
         xgb_model = xgb.XGBClassifier(**default_params)   
 
-        # Random forrest model
+        #Random forrest model
         rf = RandomForestClassifier(
             n_estimators=200,
             min_samples_split=5,
@@ -42,20 +43,21 @@ class OutageOccurrenceModel:
             class_weight='balanced_subsample'
         )
 
-        # Gradient boosting model
+        #Gradient boosting model
         gb = GradientBoostingClassifier(
             n_estimators=150,
             learning_rate=0.05,
             max_depth=3
         )
 
-        # Logistic regression model
+        #Logistic regression model
         lr = LogisticRegression(
             max_iter=1000,
             class_weight='balanced'
         )
 
-        # Stacking model
+        #Stacking reduces variance compared to any single model
+        #Each base model sees the full feature set
         self.model = StackingClassifier(
             estimators=[
                 ('xgb', xgb_model),
@@ -68,20 +70,21 @@ class OutageOccurrenceModel:
                 max_iter=3000
             ),
             stack_method='predict_proba',
-            passthrough=False
+            passthrough=False  #Don't pass raw features to meta-learner only base model probabilities
         )
 
-        self.threshold = 0.09         # Stacking threshold
-        self.feature_columns = None   # Features used for training the model
-        self.is_trained = False       # Boolean to set when model is trained
+        self.threshold = 0.09         #F2-tuned default
+        self.feature_columns = None   #Features used for training the model
+        self.is_trained = False       #Boolean to set when model is trained
 
     def tune_threshold(self, X_val, y_val):
+        #Sweep low threshold range because stacking probabilities tend to be conservative
         probs = self.model.predict_proba(X_val)[:, 1]
 
         best_t = 0.5
         best_f2 = 0
 
-        for t in np.linspace(0.05, 0.5, 20):  # focus low thresholds
+        for t in np.linspace(0.05, 0.5, 20):
             preds = (probs >= t).astype(int)
 
             tp = ((preds == 1) & (y_val == 1)).sum()
@@ -91,7 +94,7 @@ class OutageOccurrenceModel:
             precision = tp / (tp + fp + 1e-9)
             recall = tp / (tp + fn + 1e-9)
 
-            # F2 emphasizes recall more than precision
+            #F2 emphasizes recall more than precision
             beta = 2
             f2 = (1 + beta**2) * (precision * recall) / ((beta**2 * precision) + recall + 1e-9)
 
@@ -104,10 +107,10 @@ class OutageOccurrenceModel:
 
     def train(self, X: pd.DataFrame, y: pd.Series, validationSplit: float=0.2):
 
-        # Convert the columns in the dataset to a list
+        #Convert the columns in the dataset to a list
         self.feature_columns = X.columns.tolist()
 
-        # Partition the dataset into training and testing sets
+        #Partition the dataset into training and testing sets
         X_train, X_val, y_train, y_val = train_test_split(
             X, y,
             test_size=validationSplit,
@@ -115,26 +118,25 @@ class OutageOccurrenceModel:
             stratify=y
         )
 
-        # Train the model
+        #Train the model
         self.model.fit(X_train, y_train)
 
-        # Tune the threshold
+        #Tune the threshold
         self.tune_threshold(X_val, y_val)
 
-        # Set the model as trained
+        #Set the model as trained
         self.is_trained = True
 
     def predict(self, X: pd.DataFrame):
 
-        # If the model isn't trained, raise an error
+        #If the model isn't trained then raise an error
         if not self.is_trained:
             raise RuntimeError("Warning during predict(): Model isn't trained, call train() first")
         
-        # Extract the features from the dataset which were used for training
-        # Protect against missing columns
+        #Extract the features from the dataset which were used for training
         X = X.reindex(columns=self.feature_columns, fill_value=0)
 
-        # Extract the probabilities and predictions from the model
+        #Extract the probabilities and predictions from the model
         probabilities = self.model.predict_proba(X)[:, 1]
         predictions = (probabilities >= self.threshold).astype(int)
 
@@ -142,15 +144,15 @@ class OutageOccurrenceModel:
 
     def save(self, path: str):
 
-        # If the model isn't trained, raise an error
+        #If the model isn't trained then raise an error
         if not self.is_trained:
             raise RuntimeError("Warning during save(): Model isn't trained, call train() first")
 
-        # Convert the path string to a Path object
+        #Convert the path string to a Path object
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Write the model to the specified path location
+        #Write the model to the specified path location
         joblib.dump({
             "model": self.model,
             "feature_columns": self.feature_columns,
@@ -161,25 +163,25 @@ class OutageOccurrenceModel:
     @classmethod
     def load(cls, path: str) -> 'OutageOccurrenceModel':
         
-        # Convert the path string to a Path object
+        #Convert the path string to a Path object
         path = Path(path)
 
-        # If the path doesn't exist, throw an error
+        #If the path doesn't exist, throw an error
         if not path.exists():
             raise FileNotFoundError(f"Warning during load(): Model file not found at {path}")
 
-        # Extract the model data
+        #Extract the model data
         saved_data = joblib.load(path)
 
-        # Create a new instance of the model class
+        #Create a new instance of the model class
         instance = cls()
 
-        # Load the saved data into the new model class
+        #Load the saved data into the new model class
         instance.model = saved_data["model"]
         instance.feature_columns = saved_data["feature_columns"]
         instance.is_trained = saved_data["is_trained"]
         instance.threshold = saved_data.get("threshold", 0.5)
 
-        # Return the new instance
+        #Return the new instance
         return instance
     

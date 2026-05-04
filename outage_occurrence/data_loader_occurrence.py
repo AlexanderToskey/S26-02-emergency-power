@@ -1,26 +1,24 @@
+#Loads EAGLE-I outage snapshots and converts them into county-day occurrence labels for model training
 import pandas as pd
-
 
 def load_eagle_outages(file_paths):
     """Load and concatenate EAGLE-I outage CSV files."""
     dfs = [pd.read_csv(fp) for fp in file_paths]
     outages = pd.concat(dfs, ignore_index=True)
 
-    # Ensure datetime
-    # Fix formatting issue
+    #Ensure run_start_time is datetime for merging with weather events
     outages["run_start_time"] = pd.to_datetime(
         outages["run_start_time"],
         errors="coerce"
     )
 
-    # Drop empty rows
     outages = outages.dropna(subset=["run_start_time"])
 
     return outages
 
 
 def load_noaa_weather(file_path):
-    """Load NOAA storm event data."""
+    #Loads NOAA storm events data
     weather = pd.read_csv(file_path)
 
     weather["begin_date_time"] = pd.to_datetime(weather["begin_date_time"])
@@ -35,14 +33,13 @@ def load_noaa_weather(file_path):
 
 
 def merge_weather_outages(outages, weather):
-    """
-    Merge weather events onto outage records.
-    Adds binary flag for whether outage occurred during storm.
-    """
 
+    #Merge weather events onto outage records
+    #Adds binary flag for whether outage occurred during storm
+   
     merged = outages.copy()
 
-    # Default: no storm
+    #Default to no storm
     merged["storm_event"] = 0
 
     for _, event in weather.iterrows():
@@ -52,8 +49,7 @@ def merge_weather_outages(outages, weather):
         )
         merged.loc[mask, "storm_event"] = 1
 
-    # ---- Create outage occurrence target ----
-    # If customers_out > 0 → outage occurred
+    # If customers_out > 0 then an outage occurred
     merged["outage_occurred"] = (merged["customers_out"] > 0).astype(int)
 
     return merged
@@ -62,13 +58,9 @@ def merge_occurrence_with_weather(
     occurrence_df: pd.DataFrame,
     ghcnd_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """
-    Merge county-day outage occurrence labels with GHCN-Daily weather.
-
-    This preserves ALL weather days, even if no outage occurred.
-    Missing outage labels are filled as 0.
-    """
-
+    
+    #This merges county-day outage occurrence labels with GHCN daily weather
+    #Left join keeps all weather rows — non-outage days need to stay in as negatives
     for col in ["fips_code", "date"]:
         if col not in occurrence_df.columns:
             raise ValueError(f"occurrence_df missing required column: {col}")
@@ -87,7 +79,7 @@ def merge_occurrence_with_weather(
         how="left",
     )
 
-    # Fill missing outage days as 0
+    #Fill missing outage days as 0
     merged["outage_occurred"] = merged["outage_occurred"].fillna(0).astype(int)
     merged["max_customers_affected"] = (
         merged["max_customers_affected"].fillna(0).astype(int)
@@ -101,29 +93,15 @@ def merge_occurrence_with_weather(
     return merged
 
 def build_occurrence_labels(outages_df: pd.DataFrame, min_customers: int = 100) -> pd.DataFrame:
-    """
-    Convert raw EAGLE-I outage snapshots into county-day binary occurrence labels.
-
-    For each (fips_code, date):
-        outage_occurred = 1 if max customers_affected >= min_customers that day
-        outage_occurred = 0 otherwise
-
-    min_customers: minimum customer threshold for a day to count as an outage.
-        Default 100 filters routine 1-5 customer line faults.
-
-    Returns:
-        DataFrame with:
-            fips_code
-            date
-            outage_occurred (0/1)
-            max_customers_affected
-    """
+    #EAGLE-I records 15-min snapshots — we reduce to one label per county per day
+    #Using max so a brief but large spike still counts as an outage day
     required_cols = ["fips_code", "run_start_time", "customers_affected"]
     for col in required_cols:
         if col not in outages_df.columns:
             raise ValueError(f"outages_df missing required column: {col}")
 
     df = outages_df.copy()
+    #Normalize strips the time component so timestamps align on day-level joins
     df["date"] = pd.to_datetime(df["run_start_time"]).dt.normalize()
 
     grouped = (
@@ -148,14 +126,14 @@ def build_occurrence_labels(outages_df: pd.DataFrame, min_customers: int = 100) 
 
 
 def load_ghcnd_weather(file_path):
-    """Load GHCN-Daily weather data."""
+    #Load GHCN weather data
     ghcnd = pd.read_csv(file_path)
     ghcnd["date"] = pd.to_datetime(ghcnd["date"]).dt.normalize()
     return ghcnd
 
 
 def merge_ghcnd_weather(merged, ghcnd):
-    """Merge daily weather features onto outage dataset."""
+    #Merge daily weather features onto outage dataset
     merged["date"] = merged["run_start_time"].dt.normalize()
     ghcnd["date"] = pd.to_datetime(ghcnd["date"]).dt.normalize()
 
@@ -165,7 +143,7 @@ def merge_ghcnd_weather(merged, ghcnd):
 
 
 def validate_data(df):
-    """Basic data validation."""
+    #Data validation
     print("    Missing values per column:")
     print(df.isna().sum())
 
@@ -174,9 +152,7 @@ def validate_data(df):
         print(df["outage_occurred"].value_counts())
 
 def summarize_class_balance(df: pd.DataFrame) -> None:
-    """
-    Print class balance for outage occurrence target.
-    """
+    #Print class balance for outage occurrence target
     if "outage_occurred" not in df.columns:
         raise ValueError("DataFrame missing 'outage_occurred' column")
 

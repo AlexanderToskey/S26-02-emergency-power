@@ -1,3 +1,7 @@
+#Training and evaluation script for the outage duration model
+#Supports both a two-stage model (classifier + two specialists) and a
+#single-stage baseline so you can compare them side by side.
+
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 import numpy as np
@@ -19,8 +23,7 @@ from src.evaluator import (
     printTwoStageReport,
 )
 
-# set True to run the two-stage model (+ single-stage baseline for comparison)
-# set False to run only the single-stage model
+#Flip this to False if you just want to run the single-stage baseline on its own for testing
 USE_TWO_STAGE = True
 
 
@@ -28,6 +31,7 @@ def main():
     """Load outage + weather data, run preprocessing, train/evaluate the duration model, and save to disk."""
     data_dir = Path("../data")
 
+    #Load all available EAGLE-I outage files and merge with storm event records
     print("\nLoading outage data...")
     eagle_files = sorted(data_dir.glob("eaglei_outages_*.csv"))
     outages = load_eagle_outages(eagle_files)
@@ -39,17 +43,15 @@ def main():
     print("Merging with NOAA Storm Events...")
     merged = merge_weather_outages(outages, weather)
 
+    #Using Open-Meteo historical data in place of GHCND
     print("Loading GHCN-Daily weather data...")
-    # ghcnd = load_ghcnd_weather(data_dir / "ghcnd_va_daily.csv")
     ghcnd = load_ghcnd_weather(data_dir / "openmeteo_va_historical.csv")
 
-
+    #Quick check to make sure the wind columns actually have data before training
     print("\n[DEBUG] Verifying GHCN-Daily Feature Presence...")
-    # Check the raw weather file before merging
     weather_cols = ghcnd.columns.tolist()
     print(f"Columns found in CSV: {weather_cols}")
 
-    # Check for actual data (not just NaNs) in the new wind features
     for col in ['wsf2_ms', 'wsf5_ms', 'awnd_ms', 'wsfg_ms']:
         if col in ghcnd.columns:
             non_zero = (ghcnd[col] > 0).sum()
@@ -63,91 +65,33 @@ def main():
     print("Running preprocessing...")
     X, y = run_full_pipeline(merged)  # y is duration in minutes
 
+    #If these come back as all zeros something went wrong in the merge
     print("\n[DEBUG] Final Feature Check (Training Set):")
     for col in ['max_wind_speed', 'awnd_ms', 'prcp_mm', 'wsfg_ms']:
         if col in X.columns:
             non_zero_pct = (X[col] > 0).mean() * 100
             print(f"  {col}: {non_zero_pct:.2f}% of samples have non-zero data")
 
-
-    # print("\nExporting a small sample of the preprocessed data...")
-    
-    # # Recombine features (X) and target (y) so they are in one file
-    # sample_export = X.copy()
-    # sample_export['TARGET_duration'] = y
-    
-    # # Grab a random sample of 100 rows
-    # small_sample = sample_export.sample(n=100, random_state=42)
-    
-    # # Save it to the data directory
-    # sample_path = data_dir / "preprocessed_sample_duration.csv"
-    # small_sample.to_csv(sample_path, index=False)
-    # print(f"Saved 100 sample rows to {sample_path}")
-    # # ---------------------------------------
-
-    # print("Splitting train/test...")
-    # X_train, X_test, y_train, y_test = train_test_split(
-    #     X, y, test_size=0.2, random_state=42
-    # )
-
-    
-    # --- 3. Temporal Split Logic ---
+    #Temporal split training on everything before 2022, test on 2022 only
+    #This avoids leaking future data into training, which would inflate results
     TEST_YEAR = 2022
     print(f"\n[!] TEMPORAL SPLIT: Training on 2014-{TEST_YEAR-1}, Testing on {TEST_YEAR}")
-    
+
     train_mask = X['year'] < TEST_YEAR
     test_mask = X['year'] == TEST_YEAR
 
-                # "event_Avalanche":         0,
-                # "event_Coastal Flood":     0,
-                # "event_Cold/Wind Chill":   int(tmin < -10),
-                # "event_Debris Flow":       0,
-                # "event_Drought":           0,
-                # "event_Excessive Heat":    int(row.get("tmax_c", 0) > 38),
-                # "event_Extreme Cold/Wind Chill": int(tmin < -20),
-                # "event_Funnel Cloud":      0,
-                # "event_Heat":              int(row.get("tmax_c", 0) > 32),
-                # "event_Rip Current":       0,
-                # "event_Tornado":           0,
-                # "event_Tropical Storm":    int(gust > 33 and prcp > 25),
-                # "event_Wildfire":          0,
-
+    #Drop year and rare event types that don't add signal for Virginia outages
     INCLUDE_DYNAMIC_FEATURES = True
-    # cols_to_drop = ['year', 'county_max_customers', 'initial_impact_density']
     cols_to_drop = ['year']
     cols_to_drop += ['event_Avalanche','event_Coastal Flood','event_Debris Flow','event_Drought',
                      'event_Funnel Cloud','event_Rip Current','event_Tornado','event_Wildfire']
-    # cols_to_drop += ['event_None','county_median_duration','county_long_rate']
 
+    #Dynamic features are only available during nowcasting
     if not INCLUDE_DYNAMIC_FEATURES:
         print("[!] GENERALIZATION MODE: Removing growth features.")
         cols_to_drop += ["initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m"]
 
-    # cols_to_drop = []
-    # cols_to_drop = X_full.columns
-
-    # cols_to_keep = ['county_median_scope', 'has_weather_event', 'max_magnitude', 'event_High Wind', 'event_Thunderstorm Wind']
-    # cols_to_keep = ['max_magnitude']
-
-    # cols_to_drop = X_full.columns.difference(cols_to_keep)
-
-
     X = X.drop(columns=cols_to_drop)
-
-    # print("\nExporting a small sample of the preprocessed data...")
-    
-    # # Recombine features (X) and target (y) so they are in one file
-    # sample_export = X.copy()
-    # sample_export['TARGET_peak_customers_affected'] = y
-    
-    # # Grab a random sample of 100 rows
-    # small_sample = sample_export.sample(n=100, random_state=42)
-    
-    # # Save it to the data directory
-    # sample_path = data_dir / "preprocessed_sample_scope.csv"
-    # small_sample.to_csv(sample_path, index=False)
-    # print(f"Saved 100 sample rows to {sample_path}")
-    # ---------------------------------------
 
     X_train, y_train = X[train_mask], y[train_mask]
     X_test, y_test = X[test_mask], y[test_mask]
@@ -156,19 +100,20 @@ def main():
     print(f"  Test samples (Year {TEST_YEAR}): {len(X_test):,}")
 
     if USE_TWO_STAGE:
-        # ── Two-stage model ────────────────────────────────────────────────────
+        #Train the classifier with two specialist regressors together
         print("\nTraining two-stage model (classifier + two regressors)...")
         twoStage = TwoStageOutageModel()
         twoStage.train(X_train, y_train)
 
         print(f"[train_eval] Using auto-tuned classifier threshold: {twoStage.classifierThreshold:.2f}")
 
+        #Get predictions with routing labels so we can evaluate the classifier separately
         print("\nEvaluating two-stage model...")
         hardPreds, routing = twoStage.predictWithRouting(X_test)
         classMetrics = evaluateClassifier(y_test.values, routing)
         twoStageMetrics = evaluateModel(y_test.values, hardPreds)
 
-        # ── Single-stage baseline for comparison ───────────────────────────────
+        #Train a single XGBoost as a baseline to show what the two-stage architecture gains
         print("\nTraining single-stage baseline (for comparison)...")
         singleModel = OutageDurationModel()
         singleModel.train(X_train, y_train, longWeight=2.0)
@@ -195,40 +140,34 @@ def main():
         )[:10]:
             print(f"  {k:30s} {v:.4f}")
 
-
-        # --- 5. ORACLE EVALUATION (Bypassing Stage 1) ---
-        THRESHOLD = 240.0 #minutes
+        #---Oracle evaluation---
+        #Bypass the classifier and route using true labels
+        #This shows the theoretical best the specialists could achieve with perfect routing
+        THRESHOLD = 240.0  # 4 hours in minutes
 
         print("\n" + "="*50)
         print("ORACLE EVALUATION: PERFECT ROUTING")
         print("="*50)
 
-        # Define the Oracle Masks based on ACTUAL values in the test set
         test_large_mask = y_test >= THRESHOLD
         test_small_mask = y_test < THRESHOLD
-
-        # Initialize final prediction array
         final_preds = np.empty_like(y_test, dtype=float)
 
-        # 5a. Small Specialist Oracle Run
         if test_small_mask.sum() > 0:
             print(f"Routing {test_small_mask.sum():,} actual small events to Small Specialist...")
-            # We access the sub-regressor directly to skip the internal classifier
-            # Note: Regressor predicts log1p, so we must expm1 it.
+            #Regressors predict duration so we need to undo that with expm1
             pred_log_small = twoStage.shortRegressor.predict(X_test[test_small_mask])
             final_preds[test_small_mask] = np.expm1(np.clip(pred_log_small, -20, 20))
 
-        # 5b. Large Specialist Oracle Run
         if test_large_mask.sum() > 0:
             print(f"Routing {test_large_mask.sum():,} actual large events to Large Specialist...")
             pred_log_large = twoStage.longRegressor.predict(X_test[test_large_mask])
             final_preds[test_large_mask] = np.expm1(np.clip(pred_log_large, -20, 20))
 
-        # --- 6. Final Oracle Report ---
         print("\n" + "="*50)
         print("THEORETICAL MAXIMUM PIPELINE PERFORMANCE")
         print("="*50)
-        
+
         metrics = evaluateModel(y_test.values, final_preds)
         printEvaluationReport(metrics)
 
@@ -245,12 +184,10 @@ def main():
         print("\nSaving two-stage duration model...")
         model_dir = Path("../models")
         model_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Save the two-stage model
         twoStage.save(model_dir / "duration_model.joblib")
 
     else:
-        # ── Single-stage model only ────────────────────────────────────────────
+        #Single-stage fallback
         print("\nTraining model (log-duration handled internally)...")
         model = OutageDurationModel()
         model.train(X_train, y_train, longWeight=2.0)

@@ -28,18 +28,14 @@ def calculateF1(yTrue: np.ndarray, yPred: np.ndarray) -> float:
 
 
 def calculateROCAUC(yTrue: np.ndarray, yProb: np.ndarray) -> float:
-    """
-    ROC-AUC requires probability scores.
-    """
+    #ROC-AUC requires probability scores
     if yProb is None:
         return float("nan")
     return roc_auc_score(yTrue, yProb)
 
 
 def calculatePRAUC(yTrue: np.ndarray, yProb: np.ndarray) -> float:
-    """
-    PR-AUC (Average Precision) is more informative for imbalanced datasets.
-    """
+    #PR-AUC is more informative for imbalanced datasets
     if yProb is None:
         return float("nan")
     return average_precision_score(yTrue, yProb)
@@ -50,17 +46,6 @@ def evaluateModel(
     yPred: np.ndarray,
     yProb: Optional[np.ndarray] = None,
 ) -> Dict[str, float]:
-    """
-    Runs full classification evaluation.
-
-    Args:
-        yTrue: actual binary labels (0/1)
-        yPred: predicted binary labels (0/1)
-        yProb: predicted probabilities for class 1 (optional but recommended)
-
-    Returns:
-        dict of evaluation metrics
-    """
     yTrue = np.array(yTrue)
     yPred = np.array(yPred)
 
@@ -73,7 +58,7 @@ def evaluateModel(
         "pr_auc": calculatePRAUC(yTrue, yProb) if yProb is not None else float("nan"),
     }
 
-    # Confusion matrix
+    #Confusion matrix
     tn, fp, fn, tp = confusion_matrix(yTrue, yPred).ravel()
 
     metrics.update({
@@ -88,9 +73,7 @@ def evaluateModel(
 
 
 def printEvaluationReport(metrics: Dict[str, float]):
-    """
-    Prints formatted evaluation report for outage occurrence model.
-    """
+    #Prints formatted evaluation report for outage occurrence model
 
     print("\n" + "=" * 60)
     print("MODEL EVALUATION REPORT (OUTAGE OCCURRENCE)")
@@ -113,7 +96,7 @@ def printEvaluationReport(metrics: Dict[str, float]):
     print("\nDataset Info:")
     print(f"  Positive rate: {metrics['positive_rate']:.4f}")
 
-    # Recommended thresholds for imbalanced outage prediction
+    #Recommended thresholds for imbalanced outage prediction
     print("\nModel Quality Check (Occurrence Context):")
 
     if metrics["recall"] >= 0.70:

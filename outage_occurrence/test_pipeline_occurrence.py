@@ -13,7 +13,7 @@ from preprocessor_occurrence import run_full_pipeline
 def main():
     data_dir = Path("data")
 
-    # --- Step 1: Load EAGLE-I outage data ---
+    #Load EAGLE-I outage data
     print("\n>>> STEP 1: Loading EAGLE-I outage data")
     eagle_files = sorted(data_dir.glob("eaglei_outages_*.csv"))
     if not eagle_files:
@@ -26,14 +26,14 @@ def main():
     print(f"    Raw outage shape: {outages.shape}")
     print(outages.head())
 
-    # --- Step 2: Build county-day occurrence labels ---
+    #Build county-day occurrence labels
     print("\n>>> STEP 2: Building county-day occurrence labels")
     occurrence = build_occurrence_labels(outages)
 
     print(f"    Occurrence shape: {occurrence.shape}")
     print(occurrence.head())
 
-    # --- Step 3: Load GHCN-Daily weather data ---
+    #Load GHCN-Daily weather data
     print("\n>>> STEP 3: Loading GHCN-Daily weather data")
     ghcnd_path = data_dir / "ghcnd_va_daily.csv"
 
@@ -46,7 +46,7 @@ def main():
     print(f"    Weather shape: {weather.shape}")
     print(weather.head())
 
-    # --- Step 4: Merge occurrence with weather ---
+    #Merge occurrence with weather
     print("\n>>> STEP 4: Merging occurrence labels with weather")
     merged = merge_occurrence_with_weather(
         occurrence,
@@ -55,16 +55,16 @@ def main():
 
     print(f"    Final merged shape: {merged.shape}")
 
-    # --- Step 5: Validate merged dataset ---
+    #Validate merged dataset
     print("\n>>> STEP 5: Validating merged dataset")
     validate_data(merged)
     summarize_class_balance(merged)
 
-    # --- Step 6: Run full preprocessing pipeline ---
+    #Run full preprocessing pipeline
     print("\n>>> STEP 6: Running full preprocessing pipeline")
     X, y = run_full_pipeline(merged)
 
-    # --- Step 7: Show final output ---
+    #Show final output
     print("\n>>> FINAL OUTPUT")
     print(f"    X shape: {X.shape}")
     print(f"    y shape: {y.shape}")
