@@ -38,6 +38,7 @@ _CODE_FLAGS = {
 
 
 def _weather_flags(code: int) -> dict:
+    """Map a single WMO weather code to the binary feature flags the models expect."""
     return {flag: int(code in codes) for flag, codes in _CODE_FLAGS.items()}
 
 
@@ -107,6 +108,7 @@ def parse_county(fips: str, data: dict) -> list[dict]:
 
 
 def main():
+    """Fetch today's weather for all 133 Virginia counties and write to CSV."""
     geo = pd.read_csv(GEO_FILE, dtype={"fips": str})
     print(f"Fetching weather for {len(geo)} Virginia counties ...")
 

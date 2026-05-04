@@ -35,6 +35,7 @@ from outage_duration.src.preprocessor  import (
 
 
 def main():
+    """Compute per-county historical stats from EAGLE-I and write to data/county_stats.csv."""
     eagle_files = sorted(DATA_DIR.glob("eaglei_outages_*.csv"))
     print(f"Loading {len(eagle_files)} EAGLE-I files ...")
     outages = load_eagle_outages(eagle_files)

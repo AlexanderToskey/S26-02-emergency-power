@@ -1,3 +1,24 @@
+"""
+outage_app.py - Flask web application for the Virginia Outage Prediction Dashboard.
+
+Serves the interactive county map and exposes a JSON API consumed by the frontend.
+On startup, loads all models and runs an initial inference pass so the first page
+load is never empty. Background threads then refresh live predictions every 15
+minutes and the 7-day forecast every hour.
+
+API routes:
+    GET /                       Render the map dashboard
+    GET /api/counties           GeoJSON for all Virginia counties
+    GET /api/predictions        Live county-level outage predictions
+    GET /api/forecast           7-day county-level forecast
+    GET /api/explain/<fips>     Weather inputs + SHAP values for one county
+    GET /api/status             Model load status and last inference timestamp
+    GET /api/logs               Last 500 server log lines
+
+Usage:
+    python outage_app.py
+"""
+
 from flask import Flask, render_template, jsonify, request
 import collections
 import json

@@ -1,11 +1,36 @@
+"""
+autoencoder.py - PyTorch autoencoder for weather anomaly detection.
+
+Learns to reconstruct normal county-day weather feature vectors during
+training. At inference, counties whose weather is unusual produce high
+reconstruction error and are flagged as anomalous (Tier 2 detection).
+
+Architecture: input → 64 → 32 → latent_dim (encoder)
+              latent_dim → 32 → 64 → input (decoder)
+"""
+
 import torch
 import torch.nn as nn
 import numpy as np
 
+
 class Autoencoder(nn.Module):
+    """
+    Symmetric encoder-decoder network for reconstruction-based anomaly detection.
+
+    Trained only on normal (non-outage) weather samples so that unusual
+    conditions produce a high mean-squared reconstruction error.
+    """
+
     def __init__(self, input_dim: int, latent_dim: int = 16):
+        """
+        Args:
+            input_dim: Number of input weather features.
+            latent_dim: Size of the compressed bottleneck representation.
+        """
         super().__init__()
 
+        # ── Encoder: compress input to latent representation ──────────────────
         self.encoder = nn.Sequential(
             nn.Linear(input_dim, 64),
             nn.ReLU(),
@@ -14,6 +39,7 @@ class Autoencoder(nn.Module):
             nn.Linear(32, latent_dim)
         )
 
+        # ── Decoder: reconstruct input from latent representation ─────────────
         self.decoder = nn.Sequential(
             nn.Linear(latent_dim, 32),
             nn.ReLU(),
@@ -25,13 +51,18 @@ class Autoencoder(nn.Module):
     def forward(self, x):
         z = self.encoder(x)
         return self.decoder(z)
-    
-    def detect(self, X_np, _ae_threshold):
+
+    def detect(self, X_np: np.ndarray, _ae_threshold: float):
         """
-        X_np: numpy array of normalized features (n_samples x n_features)
+        Flag counties whose weather deviates from the learned normal distribution.
+
+        Args:
+            X_np: Normalized feature array of shape (n_samples, n_features).
+            _ae_threshold: Reconstruction MSE above which a sample is anomalous.
+
         Returns:
-            errors: np.array of reconstruction MSE per row
-            anomaly_mask: boolean np.array where True = anomaly
+            errors: Per-row reconstruction MSE as a numpy array.
+            anomaly_mask: Boolean array where True indicates an anomaly.
         """
         with torch.no_grad():
             X_tensor = torch.tensor(X_np, dtype=torch.float32)
@@ -44,9 +75,17 @@ class Autoencoder(nn.Module):
 class AutoencoderWrapper:
     """
     Lightweight wrapper for inference-time anomaly detection.
+
+    Holds a trained Autoencoder and its threshold so callers only need
+    to pass raw feature arrays — no threshold management required.
     """
 
     def __init__(self, model: Autoencoder, threshold: float):
+        """
+        Args:
+            model: Trained Autoencoder instance.
+            threshold: MSE cutoff above which a sample is flagged as anomalous.
+        """
         self.model = model
         self.model.eval()
         self.threshold = threshold
@@ -54,7 +93,13 @@ class AutoencoderWrapper:
     @torch.no_grad()
     def reconstruction_error(self, X: np.ndarray) -> np.ndarray:
         """
-        Returns per-row reconstruction error (MSE).
+        Compute per-row reconstruction MSE for a batch of samples.
+
+        Args:
+            X: Normalized feature array of shape (n_samples, n_features).
+
+        Returns:
+            Per-row MSE as a numpy array of shape (n_samples,).
         """
         x_tensor = torch.tensor(X, dtype=torch.float32)
         recon = self.model(x_tensor)
@@ -63,9 +108,14 @@ class AutoencoderWrapper:
 
     def detect(self, X: np.ndarray):
         """
+        Run anomaly detection on a batch of normalized weather features.
+
+        Args:
+            X: Normalized feature array of shape (n_samples, n_features).
+
         Returns:
-            errors: np.ndarray
-            anomaly_mask: np.ndarray (bool)
+            errors: Per-row reconstruction MSE as a numpy array.
+            anomaly_mask: Boolean array where True indicates an anomaly.
         """
         errors = self.reconstruction_error(X)
         mask = errors > self.threshold

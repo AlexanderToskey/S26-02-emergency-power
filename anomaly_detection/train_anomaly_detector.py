@@ -1,3 +1,12 @@
+"""
+train_anomaly_detector.py - Trains the Tier 2 Isolation Forest anomaly detector.
+
+Loads the same county-day occurrence dataset used for the occurrence model,
+runs the standard preprocessing pipeline, then fits a sklearn IsolationForest
+on the resulting feature matrix. The trained model is saved to models/ and
+used at inference time to flag statistically unusual weather patterns before
+the main prediction cascade runs.
+"""
 
 import sys
 from pathlib import Path
@@ -19,6 +28,7 @@ from sklearn.ensemble import IsolationForest
 
 
 def main():
+    """Load data, preprocess, train the Isolation Forest, and save to disk."""
     # Get the base directory and get the data and model directories
     BASE_DIR = Path(__file__).resolve().parent.parent
     data_dir = BASE_DIR / "data"

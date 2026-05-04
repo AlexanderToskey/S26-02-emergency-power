@@ -26,6 +26,7 @@ OUTPUT = Path("data/virginia_geo.csv")
 
 
 def main():
+    """Download the Census Gazetteer, filter to Virginia, and write data/virginia_geo.csv."""
     OUTPUT.parent.mkdir(exist_ok=True)
 
     print("Fetching Census Gazetteer ...")

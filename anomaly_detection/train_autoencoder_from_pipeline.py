@@ -43,6 +43,17 @@ SAVE_PATH = MODELS_DIR / "autoencoder.pt"
 # Helper: normalization
 # ─────────────────────────────────────────────────────────────
 def normalize(X: np.ndarray):
+    """Z-score normalize a feature matrix column-wise.
+
+    Columns with zero standard deviation are left unchanged (std set to 1)
+    to avoid division by zero on constant features.
+
+    Args:
+        X: Feature matrix of shape (n_samples, n_features).
+
+    Returns:
+        Tuple of (normalized X, column means, column stds).
+    """
     mean = X.mean(axis=0)
     std = X.std(axis=0)
     std[std == 0] = 1.0
@@ -52,6 +63,7 @@ def normalize(X: np.ndarray):
 # Main training
 # ─────────────────────────────────────────────────────────────
 def main():
+    """Load occurrence data, train the autoencoder on pre-2022 samples, and save to models/."""
     print("=" * 60)
     print("[AE] TRAINING AUTOENCODER FROM PIPELINE")
     print("=" * 60)

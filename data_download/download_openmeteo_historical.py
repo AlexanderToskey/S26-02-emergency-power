@@ -1,3 +1,20 @@
+"""
+download_openmeteo_historical.py - Download historical daily weather for all Virginia counties.
+
+Fetches hourly data from the Open-Meteo Archive API (2014-01-01 to 2022-12-31),
+aggregates it to daily county-level records, and appends each county to
+data/openmeteo_va_historical.csv. Supports resuming a partial download —
+counties already in the output file are skipped automatically.
+
+No API key required. Rate-limit handling (HTTP 429) is built in.
+
+Usage:
+    python download_openmeteo_historical.py
+
+Output:
+    data/openmeteo_va_historical.csv  (one row per county-day)
+"""
+
 import pandas as pd
 import requests
 import time
@@ -21,6 +38,23 @@ _CODE_FLAGS = {
 }
 
 def fetch_county_history(fips, lat, lon, start="2014-01-01", end="2022-12-31"):
+    """Fetch and aggregate historical daily weather for one county from Open-Meteo Archive.
+
+    Retrieves hourly data, aggregates to daily records (max/min temp, sum precip/snow,
+    max snow depth, mean wind, max gusts, weather type flags), and converts units to
+    match the training pipeline (km/h → m/s, cm → mm, m → mm).
+
+    Args:
+        fips: County FIPS code (used to label output rows).
+        lat: Latitude of the county centroid.
+        lon: Longitude of the county centroid.
+        start: Start date string in YYYY-MM-DD format.
+        end: End date string in YYYY-MM-DD format.
+
+    Returns:
+        DataFrame with one row per day and model-ready feature columns,
+        or None if the fetch fails after all retries.
+    """
     url = "https://archive-api.open-meteo.com/v1/archive"
     params = {
         "latitude": lat,
@@ -87,6 +121,7 @@ def fetch_county_history(fips, lat, lon, start="2014-01-01", end="2022-12-31"):
     return None
     
 def main():
+    """Iterate over all Virginia counties and download historical weather, skipping completed ones."""
     geo = pd.read_csv(GEO_FILE, dtype={"fips": str})
 
     if OUTPUT_FILE.exists():
