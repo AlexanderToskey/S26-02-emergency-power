@@ -25,6 +25,7 @@ USE_TWO_STAGE = True
 
 
 def main():
+    """Load outage + weather data, run preprocessing, train/evaluate the duration model, and save to disk."""
     data_dir = Path("../data")
 
     print("\nLoading outage data...")

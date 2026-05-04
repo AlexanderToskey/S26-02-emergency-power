@@ -43,6 +43,7 @@ class TwoStageOutageModel:
         longRegressorParams: Dict[str, Any] = None,
         thresholdMin: float = LONG_THRESHOLD_MIN,
     ):
+        """Initialize classifier and both regressors with optional param overrides."""
         self.thresholdMin = thresholdMin
 
         # ── Stage 1: classifier ───────────────────────────────────────────────
@@ -295,21 +296,25 @@ class TwoStageOutageModel:
         return preds, isLong.astype(int)
 
     def getClassifierImportances(self) -> Dict[str, float]:
+        """Return feature importances from the Stage 1 classifier."""
         if not self.isTrained:
             raise ValueError("model hasn't been trained yet")
         return dict(zip(self.featureNames, self.classifier.feature_importances_))
 
     def getShortRegressorImportances(self) -> Dict[str, float]:
+        """Return feature importances from the Stage 2a short outage regressor."""
         if not self.isTrained:
             raise ValueError("model hasn't been trained yet")
         return dict(zip(self.featureNames, self.shortRegressor.feature_importances_))
 
     def getLongRegressorImportances(self) -> Dict[str, float]:
+        """Return feature importances from the Stage 2b long outage regressor."""
         if not self.isTrained:
             raise ValueError("model hasn't been trained yet")
         return dict(zip(self.featureNames, self.longRegressor.feature_importances_))
 
     def save(self, path: str):
+        """Persist all three sub-models and the tuned classifier threshold to a single joblib file."""
         if not self.isTrained:
             raise ValueError("can't save untrained model")
         joblib.dump({
@@ -324,6 +329,7 @@ class TwoStageOutageModel:
 
     @classmethod
     def load(cls, path: str) -> 'TwoStageOutageModel':
+        """Restore a saved two-stage model from disk."""
         data = joblib.load(path)
         instance = cls(thresholdMin=data['thresholdMin'])
         instance.classifier = data['classifier']

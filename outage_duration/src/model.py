@@ -114,6 +114,7 @@ class OutageDurationModel:
 
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
+        """Predict outage duration in minutes. Inverts the log1p transform used during training."""
         if not self.isTrained:
             raise ValueError("model hasnt been trained yet, call train() first")
 
