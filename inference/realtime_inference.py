@@ -29,14 +29,13 @@ import numpy as np
 import pandas as pd
 import torch
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
+# Paths 
 BASE_DIR   = Path(__file__).resolve().parent.parent
 MODELS_DIR = BASE_DIR / "models"
 DATA_DIR   = BASE_DIR / "data"
 GEO_FILE   = DATA_DIR / "virginia_geo.csv"
 STATS_FILE = DATA_DIR / "county_stats.csv"
 
-# Make sure subpackages are importable
 sys.path.insert(0, str(BASE_DIR))
 
 from outage_occurrence.occurrence_model import OutageOccurrenceModel
@@ -45,7 +44,7 @@ from outage_duration.src.two_stage_model import TwoStageOutageModel
 
 from anomaly_detection.autoencoder import Autoencoder
 
-# ── WMO weather code → binary flag mapping ────────────────────────────────────
+# WMO weather code to binary flag mapping
 _CODE_FLAGS = {
     "wt_fog":           {45, 48},
     "wt_thunder":       {95, 96, 99},
@@ -59,11 +58,8 @@ _CODE_FLAGS = {
 
 _OPEN_METEO_URL  = "https://api.open-meteo.com/v1/forecast"
 
-# Kubra / Dominion StormCenter IDs (same as dominion_scraper.py)
-_STORMCENTER_ID  = "9c691bb6-767e-4532-b00e-286ac9adc223"
-_VIEW_ID         = "38b5394c-8bca-4dfd-ac59-b321615446bd"
 
-# Maximum parallel threads for weather fetching — keep low to avoid rate-limiting
+# Maximum parallel threads for weather fetching: keep low to avoid rate-limiting
 _WEATHER_WORKERS = 6
 _WEATHER_RETRIES = 3
 _WEATHER_RETRY_DELAY = 2.0  # seconds between retries
@@ -72,7 +68,6 @@ _WEATHER_RETRY_DELAY = 2.0  # seconds between retries
 # Retrained model uses threshold >= 100 customers, but scope filter adds a secondary check.
 _MIN_SCOPE_CUSTOMERS = 50
 
-# ── Module-level state ─────────────────────────────────────────────────────────
 _occ_model:   Optional[OutageOccurrenceModel] = None
 _scope_model: Optional[TwoStageScopeModel]    = None
 _dur_model:   Optional[TwoStageOutageModel]   = None
@@ -113,7 +108,6 @@ _forecast_lock = threading.Lock()
 
 _EXPLAINER_NAMES = {}
 
-# ── Initialisation ─────────────────────────────────────────────────────────────
 
 def init() -> bool:
     """
@@ -126,8 +120,8 @@ def init() -> bool:
     global _EXPLAINER_NAMES
     ok = True
 
-    # --- Models ---
     try:
+        # load models
         _occ_model   = OutageOccurrenceModel.load(MODELS_DIR / "occurrence_model.joblib")
         _scope_model = TwoStageScopeModel.load(MODELS_DIR / "scope_model.joblib")
         _dur_model   = TwoStageOutageModel.load(MODELS_DIR / "duration_model.joblib")
@@ -220,36 +214,8 @@ def init() -> bool:
     return ok
 
 
-# ── Haversine distance ─────────────────────────────────────────────────────────
 
-# def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-#     """Return great-circle distance in km between two lat/lon points."""
-#     R = 6371.0
-#     dlat = math.radians(lat2 - lat1)
-#     dlon = math.radians(lon2 - lon1)
-#     a = (
-#         math.sin(dlat / 2) ** 2
-#         + math.cos(math.radians(lat1))
-#         * math.cos(math.radians(lat2))
-#         * math.sin(dlon / 2) ** 2
-#     )
-#     return R * 2 * math.asin(math.sqrt(a))
-
-
-# def _nearest_fips(lat: float, lon: float) -> Optional[str]:
-#     """Return the FIPS code of the nearest Virginia county centroid."""
-#     if _geo is None:
-#         return None
-#     best_fips, best_dist = None, float("inf")
-#     for _, row in _geo.iterrows():
-#         d = _haversine(lat, lon, row["latitude"], row["longitude"])
-#         if d < best_dist:
-#             best_dist = d
-#             best_fips = row["fips"]
-#     return best_fips
-
-
-# ── Open-Meteo weather fetching ────────────────────────────────────────────────
+# Open-Meteo weather fetching
 
 def _fetch_one_county_weather(lat: float, lon: float) -> Optional[dict]:
     """Fetch today's hourly + daily weather for one lat/lon from Open-Meteo.
@@ -276,19 +242,16 @@ def _fetch_one_county_weather(lat: float, lon: float) -> Optional[dict]:
 def _aggregate_to_county_day(fips: str, data: dict, now: datetime) -> dict:
     """
     Collapse 24 Open-Meteo hourly rows into one county-day feature row.
-    Unit conversions match the training data exactly:
-        snowfall cm  → mm  (*10)
-        snow_depth m → mm  (*1000)
-        wind km/h    → m/s (/3.6)
+    Unit conversions match the training data exactly
     """
     h = data["hourly"]
     d = data["daily"]
 
     precip_vals  = [v or 0.0 for v in h["precipitation"]]
-    snow_vals    = [(v or 0.0) * 10   for v in h["snowfall"]]      # cm → mm
-    snwd_vals    = [(v or 0.0) * 1000 for v in h["snow_depth"]]    # m  → mm
-    wind_ms_vals = [(v or 0.0) / 3.6  for v in h["windspeed_10m"]] # km/h → m/s
-    gust_ms_vals = [(v or 0.0) / 3.6  for v in h["windgusts_10m"]] # km/h → m/s
+    snow_vals    = [(v or 0.0) * 10   for v in h["snowfall"]]      # cm to mm
+    snwd_vals    = [(v or 0.0) * 1000 for v in h["snow_depth"]]    # m to mm
+    wind_ms_vals = [(v or 0.0) / 3.6  for v in h["windspeed_10m"]] # km/h to m/s
+    gust_ms_vals = [(v or 0.0) / 3.6  for v in h["windgusts_10m"]] # km/h to m/s
     codes        = [int(v or 0)        for v in h["weathercode"]]
 
     prcp_mm  = sum(precip_vals)
@@ -305,6 +268,7 @@ def _aggregate_to_county_day(fips: str, data: dict, now: datetime) -> dict:
         for flag, code_set in _CODE_FLAGS.items()
     }
 
+    # only return true for severe events like thunderstorms
     has_event = int(any(c >= 95 for c in codes))
 
     row = {
@@ -327,7 +291,7 @@ def _aggregate_to_county_day(fips: str, data: dict, now: datetime) -> dict:
         "max_magnitude":     round(max(prcp_mm, awnd_ms), 3),
         "magnitude_missing": 0,
     }
-    row.update(flags)
+    row.update(flags) # add one hot encoding for weather events
     return row
 
 
@@ -353,11 +317,17 @@ def _make_zero_weather_row(fips: str, now: datetime) -> dict:
         "max_magnitude":     0.0,
         "magnitude_missing": 1,   # mark as missing so model knows
     }
-    row.update({flag: 0 for flag in _CODE_FLAGS})
+    row.update({flag: 0 for flag in _CODE_FLAGS}) # add one hot encoding for weather events
     return row
 
 
+
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Finds haversine distance between two points on map.
+    Used to find nearby counties.
+    Returns distance in km
+    """
     R = 6371.0
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
@@ -373,11 +343,11 @@ def _fetch_weather_all_counties(now: datetime) -> pd.DataFrame:
     nearest successful county rather than zeros.
     Returns a county-day DataFrame (one row per county).
     """
-    rows: List[Optional[dict]] = [None] * len(_geo)
+    rows: List[Optional[dict]] = [None] * len(_geo) # _geo used to get lat/lon for counties
     failed_indices: List[int] = []
 
     def _worker(idx: int, fips: str, lat: float, lon: float):
-        data = _fetch_one_county_weather(lat, lon)
+        data = _fetch_one_county_weather(lat, lon) # basic fetch, no forecasting
         if data is None:
             return idx, None
         return idx, _aggregate_to_county_day(fips, data, now)
@@ -389,13 +359,14 @@ def _fetch_weather_all_counties(now: datetime) -> pd.DataFrame:
         }
         for future in as_completed(futures):
             idx, row_dict = future.result()
-            rows[idx] = row_dict
+            rows[idx] = row_dict # idx corresponds to row from _geo created by iterrows
 
     # Identify failures
     for i, r in enumerate(rows):
         if r is None:
             failed_indices.append(i)
 
+    # get weather data from nearest county, if there are failures
     if failed_indices:
         print(f"[realtime] Weather failed for {len(failed_indices)} / {len(_geo)} counties after retries.")
 
@@ -427,7 +398,7 @@ def _fetch_weather_all_counties(now: datetime) -> pd.DataFrame:
 
     return pd.DataFrame(rows)
 
-# ── Kubra instance IDs ────────────────────────────────────────────────────────
+# Kubra instance IDs 
 
 _KUBRA_BASE = "https://kubra.io"
 
@@ -445,14 +416,19 @@ _APPALACHIAN = {
     "thematic": "thematic-2",
 }
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# helpers 
+
 
 def _get(url: str, timeout: int = 15) -> dict:
+    """
+    get helper for json
+    """
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())
 
 
+# labels for kubra fetch
 def _ok(label: str):
     print(f"  [OK] {label}")
 
@@ -463,6 +439,13 @@ def _fail(label: str, e: Exception):
 _FIPS_CACHE = {}
 
 def init_fips_cache(file_path: Path):
+    """
+    Expected to get file path for GEO.
+    Creates multiple alias' in case kubra is not sending
+    the exact name that we are expecting. County takes priority
+    for cache, so fairfax county claims the alias 'fairfax' over fairfax city.
+    """
+
     global _FIPS_CACHE
     try:
         df = pd.read_csv(file_path, dtype={"county_name": str, "fips": str})
@@ -474,8 +457,7 @@ def init_fips_cache(file_path: Path):
             raw_name = row["county_name"].lower().replace(", virginia","").strip()
 
             aliases = [raw_name]
-            # Strip only the FINAL word if it is "county" or "city" so that
-            # compound names like "James City County" → "James City" not "James"
+            # Strip only the FINAL word if it is "county" or "city"
             for suffix in (" county", " city"):
                 if raw_name.endswith(suffix):
                     aliases.append(raw_name[: -len(suffix)].strip())
@@ -495,7 +477,7 @@ def _name_to_fips(name: str) -> str:
 
     return _FIPS_CACHE.get(name.lower(), "")
 
-# ── Kubra / Dominion outage fetching ──────────────────────────────────────────
+# Kubra outage fetching
 
 def _fetch_kubra_by_fips(cfg: dict) -> Dict[str, float]:
     """
@@ -504,11 +486,12 @@ def _fetch_kubra_by_fips(cfg: dict) -> Dict[str, float]:
     aggregate to county-level customer counts.
 
     Returns:
-        dict: { fips_code (str) -> customers_affected (float) }
+        dict: { fips_code (str) : customers_affected (float) }
         Empty dict if Kubra is unreachable or scraping fails.
     """
     try:
 
+        # this url is tested to give full results based on county
         state_url = (
                 f"{_KUBRA_BASE}/stormcenter/api/v1/stormcenters"
                 f"/{cfg['instance']}/views/{cfg['view']}/currentState?preview=false"
@@ -521,18 +504,18 @@ def _fetch_kubra_by_fips(cfg: dict) -> Dict[str, float]:
             _fail("currentState", e)
             return {}
 
-        # Step 2: fetch county-level outage thematic layer
+        # fetch county-level outage thematic layer
         thematic_url = f"{_KUBRA_BASE}/{data_path}/public/{cfg['thematic']}/thematic_areas.json"
 
         counties = _get(thematic_url)
         records = counties.get("file_data", counties)
 
         fips_counts : Dict[str,float]= {}
-        seen_names: Dict[str, str] = {}   # name -> fips, for duplicate detection
+        seen_names: Dict[str, str] = {}   # name : fips, for duplicate detection
         for record in records:
             name = record.get("title", "")
             desc = record.get("desc", {})
-            cust_a = desc.get("cust_a", {})
+            cust_a = desc.get("cust_a", {}) #cust_a is customers affected i.e. without power
             if isinstance(cust_a, dict):
                 cust_a = float(cust_a.get("val", 0))
             else:
@@ -541,14 +524,14 @@ def _fetch_kubra_by_fips(cfg: dict) -> Dict[str, float]:
             if cust_a <= 0:
                 continue
 
-            fips = _name_to_fips(name)
+            fips = _name_to_fips(name) # use fips cache, county gets precedence for duplicates
             if fips.isdigit():
                 if name in seen_names and seen_names[name] == fips:
                     print(f"[realtime] WARNING: duplicate Kubra record for '{name}' "
                           f"(fips={fips}, adding {cust_a} to existing "
                           f"{fips_counts.get(fips, 0.0)}) — possible double-count")
                 seen_names[name] = fips
-                fips_counts[fips] = cust_a + fips_counts.get(fips, 0.0)
+                fips_counts[fips] = cust_a + fips_counts.get(fips, 0.0) # add duplicates together
             else:
                 print(f"[realtime] Unknown region name: {name}")
 
@@ -567,10 +550,13 @@ def _fetch_kubra_by_fips(cfg: dict) -> Dict[str, float]:
         return {}
 
 
-# ── Event flag synthesis ───────────────────────────────────────────────────────
+# Event flag synthesis
 
 def _compute_event_flags(row) -> dict:
-    """Map aggregated weather features to NOAA storm event type binary flags."""
+    """
+    Map aggregated weather features to NOAA storm event type binary flags.
+    Must be created artificially from Open-Meteo data.
+    """
     prcp    = row.get("prcp_mm",  0.0)
     snow    = row.get("snow_mm",  0.0)
     snwd    = row.get("snwd_mm",  0.0)
@@ -618,7 +604,7 @@ def _compute_event_flags(row) -> dict:
     return flags
 
 
-# ── Feature alignment ──────────────────────────────────────────────────────────
+# Feature alignment
 
 def _align_features(df: pd.DataFrame, feature_names: List[str]) -> pd.DataFrame:
     """
@@ -632,7 +618,7 @@ def _align_features(df: pd.DataFrame, feature_names: List[str]) -> pd.DataFrame:
             df[col] = 0
     return df[feature_names]
 
-# ── Tier 1 Anomaly Detection ──────────────────────────────────────────────────────────
+# Tier 1 Anomaly Detection
 
 def _anomaly_detection_tier1(df: pd.DataFrame) -> pd.Series:
     """
@@ -649,6 +635,9 @@ def _anomaly_detection_tier1(df: pd.DataFrame) -> pd.Series:
     
     anomalies = anomalies | outlier_mask
 
+    # masking means we get every county with an outlier (row will be true)
+    # only check for most important features, but this could be easily extended
+
     for col in ["prcp_mm","tmax_c","tmin_c","awnd_ms","prcp_mm", "snow_mm"]:
         mean = df[col].mean()
         std = df[col].std()
@@ -657,7 +646,7 @@ def _anomaly_detection_tier1(df: pd.DataFrame) -> pd.Series:
             anomalies = anomalies | (z > 4.0)
     return anomalies
 
-# ── Main inference function ────────────────────────────────────────────────────
+# Main inference function 
 
 def run_inference() -> Dict[str, Any]:
     """
@@ -685,19 +674,19 @@ def run_inference() -> Dict[str, Any]:
     now = datetime.now(timezone.utc).astimezone()
     print(f"\n[realtime] === Inference run: {now.strftime('%Y-%m-%d %H:%M:%S %Z')} ===")
 
-    # ── Step 1: Weather ────────────────────────────────────────────────────────
+    # Step 1: Weather fetching for all counties (nowcasting only)
     print("[realtime] Fetching weather for all counties ...")
     weather_df = _fetch_weather_all_counties(now)
     weather_df = weather_df.reset_index(drop=True)
 
-    # ── Step 2: Kubra outages ──────────────────────────────────────────────────
-
+    #  Step 2: Kubra outages 
     print("[realtime] Fetching Kubra outage data ...")
 
     current_kubra: Dict[str, float] = _fetch_kubra_by_fips(_DOMINION)
 
     app_kubra: Dict[str, float] = _fetch_kubra_by_fips(_APPALACHIAN)
 
+    # IMPORTANT, add duplicates for counties that are split between dominion and appalachian
     for fips, cust_a in app_kubra.items():
         current_kubra[fips] = current_kubra.get(fips, 0.0) + cust_a
 
@@ -706,21 +695,21 @@ def run_inference() -> Dict[str, Any]:
     delta_kubra:   Dict[str, float] = {}
     pct_growth:    Dict[str, float] = {}
     for fips, cur_cust in current_kubra.items():
-        prev_cust = _prev_kubra.get(fips, cur_cust)  # no prior data → delta = 0
-        delta     = cur_cust - prev_cust
+        prev_cust = _prev_kubra.get(fips, cur_cust)  # if no prior data, delta = 0
+        delta = cur_cust - prev_cust
         delta_kubra[fips] = delta
         pct_growth[fips]  = delta / max(prev_cust, 1.0)
 
-    _prev_kubra      = current_kubra
+    _prev_kubra = current_kubra #save for next 15 minutes
     _prev_kubra_time = now
 
-    # ── Step 3: Merge county stats ─────────────────────────────────────────────
+    # Step 3: Merge county stats with weather stats (training had both)
     if len(_county_stats) > 0:
-        stats_cols = [c for c in _county_stats.columns if c != "fips_code"]
+        stats_cols = [c for c in _county_stats.columns if c != "fips_code"] # county stats from init
         merge_stats = _county_stats[["fips_code"] + stats_cols].copy()
         weather_df = weather_df.merge(merge_stats, on="fips_code", how="left")
 
-    # Fill any missing county-stat columns with 0 (graceful degradation)
+    # Fill any missing county-stat columns with 0
     for col in [
         "county_median_duration", "county_long_rate",
         "county_median_scope", "county_large_outage_rate", "county_max_customers",
@@ -730,24 +719,25 @@ def run_inference() -> Dict[str, Any]:
 
     weather_df = weather_df.fillna(0.0).reset_index(drop=True)
 
-    # ── Tier 1 Anomaly Detection: Statistics ───────────────────────────────────
+    # Tier 1 Anomaly Detection: Statistics
     print("[realtime] Running Tier 1 Anomaly Detection (Statistical weather checks)...")
-    anomalies = _anomaly_detection_tier1(weather_df)
+    anomalies = _anomaly_detection_tier1(weather_df) # pd.Series where each row is an anomaly, can be developed to specifically mention which counties have errors
     num_anomalies = anomalies.sum()
     if num_anomalies > 0:
         print(f"[realtime] [WARNING] Anomalous data detected in {anomalies.sum()} counties (tier1)")
 
-    # ── Step 4: Stage 1 — Occurrence ──────────────────────────────────────────
+    # Step 4: Occurrence
     print("[realtime] Running Stage 1 (Occurrence) ...")
     occ_df = weather_df.copy()
     occ_df["fips_code"] = pd.to_numeric(occ_df["fips_code"], errors="coerce")
 
+    #ensure feature alignment
     X_occ = _align_features(occ_df, _occ_model.feature_columns)
     X_occ = X_occ.apply(pd.to_numeric, errors="coerce").fillna(0)
 
     # ------------------- Autoencoder Integration -------------------
     if _ae_model is not None:
-        # 1. Select only the features the autoencoder was trained on, then normalize
+        # Select only the features the autoencoder was trained on, then normalize
         if _ae_feature_columns is not None:
             X_ae = _align_features(occ_df, _ae_feature_columns)
         else:
@@ -760,25 +750,24 @@ def run_inference() -> Dict[str, Any]:
         X_occ_norm = (X_occ_np - _ae_mean) / _ae_std
 
         # --- DIAGNOSTIC PRINT BLOCK ---
-        print("\n--- AE DIAGNOSTICS ---")
-        print(f"Type of _ae_mean: {type(_ae_mean)}")
-        print(f"First 5 values of _ae_mean: {_ae_mean[:5]}")
-        print(f"First 5 values of _ae_std: {_ae_std[:5]}")
+        # print("\n--- AE DIAGNOSTICS ---")
+        # print(f"Type of _ae_mean: {type(_ae_mean)}")
+        # print(f"First 5 values of _ae_mean: {_ae_mean[:5]}")
+        # print(f"First 5 values of _ae_std: {_ae_std[:5]}")
         
         # Check for invalid math (NaNs or Infinities)
-        invalid_count = np.sum(~np.isfinite(X_occ_norm))
-        print(f"Number of NaN/Inf values in X_occ_norm: {invalid_count}")
+        # invalid_count = np.sum(~np.isfinite(X_occ_norm))
+        # print(f"Number of NaN/Inf values in X_occ_norm: {invalid_count}")
         
-        if len(X_occ_norm) > 0:
-            print(f"First row of X_occ_norm (first 5 cols): {X_occ_norm[0][:5]}")
-        print("----------------------\n")
+        # if len(X_occ_norm) > 0:
+        #     print(f"First row of X_occ_norm (first 5 cols): {X_occ_norm[0][:5]}")
+        # print("----------------------\n")
         # ------------------------------
 
 
-        # 2. Detect anomalies
         ae_errors, anomaly_flags = _ae_model.detect(X_occ_norm, _ae_threshold)
 
-        # 3. Add results to occ_df for later merging into results
+        # add results to occ_df for later merging into results
         occ_df["ae_error"] = ae_errors
         occ_df["anomaly_flag"] = anomaly_flags
 
@@ -792,10 +781,11 @@ def run_inference() -> Dict[str, Any]:
     n_flagged = occ_mask.sum()
     print(f"[realtime] Stage 1 complete: {n_flagged} / {len(weather_df)} counties flagged.")
 
-    # ── Steps 5 & 6: Stages 2 & 3 — Scope and Duration ───────────────────────
-    scope_preds = np.zeros(len(weather_df))
-    dur_preds   = np.zeros(len(weather_df))
+    # Step 5/6: Scope and Duration 
+    scope_preds = np.zeros(len(weather_df)) # start with full length for every county, even though
+    dur_preds   = np.zeros(len(weather_df)) # we only fill with values that are predicted
 
+    # only run on counties flagged with outage
     if n_flagged > 0:
         print(f"[realtime] Running Stages 2 & 3 (Scope + Duration) on {n_flagged} counties ...")
         event_df = weather_df.loc[occ_mask].copy().reset_index(drop=True)
@@ -824,19 +814,19 @@ def run_inference() -> Dict[str, Any]:
         event_df["fips_code"] = pd.to_numeric(event_df["fips_code"], errors="coerce")
         event_df = event_df.apply(pd.to_numeric, errors="coerce").fillna(0)
 
-        # Stage 2: Scope
+        # Scope
         X_scope = _align_features(event_df.copy(), _scope_model.featureNames)
         raw_scope = _scope_model.predict(X_scope)
-        scope_preds[occ_mask.values] = raw_scope
+        scope_preds[occ_mask.values] = raw_scope    # mask so we only get rows with outages
 
-        # Stage 3: Duration
+        # Duration
         X_dur = _align_features(event_df.copy(), _dur_model.featureNames)
         raw_dur = _dur_model.predict(X_dur)
         dur_preds[occ_mask.values] = raw_dur
 
         print("[realtime] Stages 2 & 3 complete.")
 
-        # Scope sanity check — log any county predicted above 2x its historical max
+        # log any county predicted above 2x its historical max
         for pos, (_, row) in enumerate(event_df.iterrows()):
             pred_scope = raw_scope[pos]
             hist_max   = float(row.get("county_max_customers", 0))
@@ -850,8 +840,8 @@ def run_inference() -> Dict[str, Any]:
                       f"magnitude_missing={int(row.get('magnitude_missing',0))}")
 
 
-    # ── Step 7: Build and cache output ────────────────────────────────────────
-    # Cache weather + aligned model features per county for the /api/explain endpoint
+    # Step 7: Build and cache output
+    # Cache weather + aligned model features
     event_dict = {}
     if n_flagged > 0:
         for _, row in event_df.iterrows():
@@ -880,7 +870,7 @@ def run_inference() -> Dict[str, Any]:
         }
     with _cache_lock:
         # _cached_features.update(new_features)
-        _cached_features["Live"] = new_features
+        _cached_features["Live"] = new_features #UPDATED FOR FORECASTING (though this is only live)
 
 
     results: Dict[str, Any] = {}
@@ -892,7 +882,7 @@ def run_inference() -> Dict[str, Any]:
         ae_err     = round(float(occ_df.at[i, "ae_error"]), 4) if "ae_error" in occ_df.columns else 0.0
         raw_scope  = round(float(scope_preds[i]), 1) if occ else 0.0
         raw_dur    = round(float(dur_preds[i]) / 60.0, 2) if occ else 0.0
-        # Suppress low-scope predictions — occurrence model flags ~94% of counties because
+        # Suppress low-scope predictions
         # it was trained on customers_out > 0 (any outage). Filter to meaningful events.
         significant = occ and raw_scope >= _MIN_SCOPE_CUSTOMERS
         results[fips] = {
@@ -915,7 +905,7 @@ def run_inference() -> Dict[str, Any]:
 
 
 def get_cached_predictions() -> Dict[str, Any]:
-    """Return the most recently cached predictions (thread-safe)."""
+    """Return the most recently cached predictions"""
     with _cache_lock:
         return dict(_cached_predictions)
 
@@ -927,7 +917,10 @@ def get_last_updated() -> Optional[str]:
 
 
 def get_features_for_fips(fips: str, date_str: str = "Live") -> Optional[dict]:
-    """Return the cached {weather, model_row} dict for a county (thread-safe)."""
+    """
+    Return the cached {weather, model_row} dict for a county.
+    Sort by model row since each has different features
+    date_str must be either Live for nowcasting or date for forecasting"""
     with _cache_lock:
         target_cache = _cached_features.get(date_str, {})
         return target_cache.get(fips)
@@ -936,6 +929,7 @@ def get_features_for_fips(fips: str, date_str: str = "Live") -> Optional[dict]:
 def compute_shap_for_fips(fips: str, explainer_name: str, date_str: str = "Live") -> Optional[dict]:
     """
     Compute SHAP values for the occurrence model prediction for one county.
+    ADDED DATE FOR FORECASTING (default is nowcasting)
     Returns the top-10 features by absolute SHAP value, plus the base value.
     Returns None if the explainer is unavailable or features are not cached.
     """
@@ -954,7 +948,7 @@ def compute_shap_for_fips(fips: str, explainer_name: str, date_str: str = "Live"
         return None
     
 
-    model_row     = features["model_row"]
+    model_row = features["model_row"]
     
     # print(f"[SHAP] Checking {explainer_name} for {date_str}")
     # missing = [f for f in feature_names if f not in model_row]
@@ -970,17 +964,16 @@ def compute_shap_for_fips(fips: str, explainer_name: str, date_str: str = "Live"
     # print(f"Features model expects: {feature_names}")
 
 
-
     X_row = pd.DataFrame([features["model_row"]])[feature_names]
     shap_vals = explainer.shap_values(X_row)
 
-    # TreeExplainer for binary classifier may return a list [neg_class, pos_class]
-    # or a single array depending on the SHAP version
+    # changes depending on the SHAP version, we use v0.50
     if isinstance(shap_vals, list):
         sv = np.array(shap_vals[1][0])
     else:
         sv = np.array(shap_vals[0])
 
+    # same as above
     base_value = explainer.expected_value
     if isinstance(base_value, (list, np.ndarray)):
         base_value = float(base_value[1])
@@ -988,14 +981,10 @@ def compute_shap_for_fips(fips: str, explainer_name: str, date_str: str = "Live"
         base_value = float(base_value)
 
 
-
-
-
-
     # Normalize shap values
     sv = np.array(sv).astype(float).flatten()
 
-    # Return top 10 features sorted by absolute SHAP contribution
+    # Return top 10 features sorted (use abs so it includes negative contribution)
     ranked = sorted(
         zip(feature_names, sv),
         key=lambda x: abs(float(x[1])),
@@ -1023,10 +1012,9 @@ def load_autoencoder(path=MODELS_DIR / "autoencoder.pt"):
     """
     global _ae_model, _ae_mean, _ae_std, _ae_threshold, _ae_feature_columns
 
-    # Allow the numpy reconstruct function to unpickle properly
     with torch.serialization.safe_globals([np._core.multiarray._reconstruct]):
         checkpoint = torch.load(path, map_location="cpu", weights_only=False)
-    # checkpoint = torch.load(path, map_location="cpu")
+    # checkpoint = torch.load(path, map_location="cpu") # debugging for torch version, change if needed
 
     input_dim = checkpoint["input_dim"]
     model = Autoencoder(input_dim=input_dim)
@@ -1050,10 +1038,13 @@ def load_autoencoder(path=MODELS_DIR / "autoencoder.pt"):
     print(f"[AE] Loaded autoencoder from {path}, threshold={_ae_threshold:.6f}")
 
 
-# ── 7-day forecast ─────────────────────────────────────────────────────────────
+# forecast
 
 def _fetch_one_county_forecast(lat: float, lon: float, days: int = 7) -> Optional[dict]:
-    """Fetch a multi-day hourly + daily forecast for one lat/lon from Open-Meteo."""
+    """
+    Fetch a multi-day hourly + daily forecast for one lat/lon from Open-Meteo.
+    Default is 7 days.
+    """
     params = (
         f"latitude={lat}&longitude={lon}"
         "&hourly=temperature_2m,precipitation,snowfall,snow_depth,"
@@ -1088,11 +1079,11 @@ def _aggregate_forecast_days(fips: str, data: dict) -> List[dict]:
         end   = start + 24
 
         precip_vals  = [v or 0.0 for v in h["precipitation"][start:end]]
-        snow_vals    = [(v or 0.0) * 10   for v in h["snowfall"][start:end]]
+        snow_vals    = [(v or 0.0) * 10 for v in h["snowfall"][start:end]]
         snwd_vals    = [(v or 0.0) * 1000 for v in h["snow_depth"][start:end]]
-        wind_ms_vals = [(v or 0.0) / 3.6  for v in h["windspeed_10m"][start:end]]
-        gust_ms_vals = [(v or 0.0) / 3.6  for v in h["windgusts_10m"][start:end]]
-        codes        = [int(v or 0)        for v in h["weathercode"][start:end]]
+        wind_ms_vals = [(v or 0.0) / 3.6 for v in h["windspeed_10m"][start:end]]
+        gust_ms_vals = [(v or 0.0) / 3.6 for v in h["windgusts_10m"][start:end]]
+        codes        = [int(v or 0) for v in h["weathercode"][start:end]]
 
         prcp_mm = sum(precip_vals)
         snow_mm = sum(snow_vals)
@@ -1140,11 +1131,15 @@ def run_forecast(days: int = 7) -> Dict[str, Any]:
     """
     Fetch a multi-day weather forecast for all 133 counties and run the
     occurrence + scope + duration cascade for each day.
+    Default is 7 days.
 
     Returns:
         { date_str: { fips: {occurrence, scope, duration, occ_prob} } }
-    No live Kubra data is used — future outage counts are unknown, so
+    No live Kubra data is used, future outage counts are unknown, so
     initial_customers_affected and related features default to 0.
+
+    These should not actually influence the models, since forecast models
+    are not trained on those features. 
     """
     global _cached_forecast
     global _cached_features
@@ -1174,7 +1169,7 @@ def run_forecast(days: int = 7) -> Dict[str, Any]:
         }
         for future in as_completed(futures):
             idx, rows = future.result()
-            all_county_rows[idx] = rows
+            all_county_rows[idx] = rows #idx corresponds to rows in _geo
 
     # Get date labels from any successful fetch
     date_keys: Optional[List[str]] = None
@@ -1186,6 +1181,7 @@ def run_forecast(days: int = 7) -> Dict[str, Any]:
         print("[forecast] All weather fetches failed.")
         return {}
 
+    # fill with nearest county neighbor if unavailable
     n_failed = sum(1 for r in all_county_rows if r is None)
     if n_failed:
         print(f"[forecast] {n_failed} counties failed — filling from nearest neighbor.")
@@ -1210,6 +1206,8 @@ def run_forecast(days: int = 7) -> Dict[str, Any]:
 
     results_by_date: Dict[str, Any] = {}
 
+    # basically do same thing as nowcasting but for every day in forecast
+    # should work for any number of days
     for day_idx, date_str in enumerate(date_keys):
         day_rows = [all_county_rows[i][day_idx] for i in range(len(_geo))]
         day_df   = pd.DataFrame(day_rows).reset_index(drop=True)
@@ -1226,7 +1224,7 @@ def run_forecast(days: int = 7) -> Dict[str, Any]:
                 day_df[col] = 0.0
         day_df = day_df.fillna(0.0).reset_index(drop=True)
 
-        # Stage 1: Occurrence
+        # Occurrence
         occ_df = day_df.copy()
         occ_df["fips_code"] = pd.to_numeric(occ_df["fips_code"], errors="coerce")
         X_occ = _align_features(occ_df, _occ_model.feature_columns)
@@ -1241,13 +1239,13 @@ def run_forecast(days: int = 7) -> Dict[str, Any]:
             event_df = day_df.loc[occ_mask].copy().reset_index(drop=True)
 
             # No live Kubra data for future days
-            event_df["initial_customers_affected"]   = 0.0
+            event_df["initial_customers_affected"] = 0.0
             event_df["delta_customers_affected_15m"] = 0.0
-            event_df["pct_growth_15m"]               = 0.0
-            event_df["initial_impact_density"]       = 0.0
+            event_df["pct_growth_15m"] = 0.0
+            event_df["initial_impact_density"] = 0.0
             cols_to_drop = ["initial_customers_affected", "delta_customers_affected_15m", "pct_growth_15m",
                             "initial_impact_density"]
-            event_df = event_df.drop(columns=cols_to_drop)
+            event_df = event_df.drop(columns=cols_to_drop)  # DROP COLS ANYWAYS. UPDATED FOR NEW FORECAST MODELS
 
             event_flags_df = event_df.apply(_compute_event_flags, axis=1, result_type="expand")
             event_df = pd.concat([event_df, event_flags_df], axis=1)
@@ -1260,6 +1258,7 @@ def run_forecast(days: int = 7) -> Dict[str, Any]:
             X_dur = _align_features(event_df.copy(), _dur_forecast.featureNames)
             dur_preds[occ_mask.values] = _dur_forecast.predict(X_dur)
 
+            # BUILD CACHE for forecast display on app
             day_features = {}
             _weather_display_cols = [
                 "tmax_c", "tmin_c", "awnd_ms", "wsfg_ms", "prcp_mm", "snow_mm", "snwd_mm",
@@ -1300,7 +1299,7 @@ def run_forecast(days: int = 7) -> Dict[str, Any]:
 
         n_out = sum(1 for v in day_results.values() if v["occurrence"])
         print(f"[forecast]   {date_str}: {n_out} / {len(day_df)} counties flagged")
-        results_by_date[date_str] = day_results
+        results_by_date[date_str] = day_results # key is date, used for app
 
     with _forecast_lock:
         _cached_forecast = results_by_date
@@ -1310,6 +1309,6 @@ def run_forecast(days: int = 7) -> Dict[str, Any]:
 
 
 def get_cached_forecast() -> Dict[str, Any]:
-    """Return the most recently cached forecast (thread-safe)."""
+    """Return the most recently cached forecast"""
     with _forecast_lock:
         return dict(_cached_forecast)
